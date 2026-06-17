@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { middleware } from './middleware'
+import { proxy } from './proxy'
 import { q } from '@/test/helpers'
 
-// The middleware uses createServerClient from @supabase/ssr directly,
+// The proxy uses createServerClient from @supabase/ssr directly,
 // not our createSupabaseServerClient wrapper.
 vi.mock('@supabase/ssr', () => ({
   createServerClient: vi.fn(),
@@ -19,7 +19,7 @@ function req(path: string) {
   return new NextRequest(`http://localhost${path}`)
 }
 
-// Returns a mock Supabase client for middleware (synchronous createServerClient return).
+// Returns a mock Supabase client for proxy (synchronous createServerClient return).
 function makeClient(user: { id: string } | null, role?: string) {
   return {
     auth: {
@@ -43,17 +43,17 @@ beforeEach(() => vi.clearAllMocks())
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('middleware', () => {
+describe('proxy', () => {
   describe('/stream', () => {
     it('passes through without touching Supabase', async () => {
-      const result = await middleware(req('/stream'))
+      const result = await proxy(req('/stream'))
 
       expect(createServerClient).not.toHaveBeenCalled()
       expect(locationOf(result)).toBeNull()
     })
 
     it('passes through for deep paths under /stream', async () => {
-      const result = await middleware(req('/stream/overlay'))
+      const result = await proxy(req('/stream/overlay'))
 
       expect(locationOf(result)).toBeNull()
     })
@@ -65,23 +65,23 @@ describe('middleware', () => {
     })
 
     it('allows /login through', async () => {
-      expect(locationOf(await middleware(req('/login')))).toBeNull()
+      expect(locationOf(await proxy(req('/login')))).toBeNull()
     })
 
     it('redirects /host to /login', async () => {
-      expect(locationOf(await middleware(req('/host')))).toContain('/login')
+      expect(locationOf(await proxy(req('/host')))).toContain('/login')
     })
 
     it('redirects /auction to /login', async () => {
-      expect(locationOf(await middleware(req('/auction')))).toContain('/login')
+      expect(locationOf(await proxy(req('/auction')))).toContain('/login')
     })
 
     it('redirects /mobile to /login', async () => {
-      expect(locationOf(await middleware(req('/mobile')))).toContain('/login')
+      expect(locationOf(await proxy(req('/mobile')))).toContain('/login')
     })
 
     it('redirects / to /login', async () => {
-      expect(locationOf(await middleware(req('/')))).toContain('/login')
+      expect(locationOf(await proxy(req('/')))).toContain('/login')
     })
   })
 
@@ -91,23 +91,23 @@ describe('middleware', () => {
     })
 
     it('redirects /login to /host', async () => {
-      expect(locationOf(await middleware(req('/login')))).toContain('/host')
+      expect(locationOf(await proxy(req('/login')))).toContain('/host')
     })
 
     it('allows /host through', async () => {
-      expect(locationOf(await middleware(req('/host')))).toBeNull()
+      expect(locationOf(await proxy(req('/host')))).toBeNull()
     })
 
     it('allows deep /host paths through', async () => {
-      expect(locationOf(await middleware(req('/host/settings')))).toBeNull()
+      expect(locationOf(await proxy(req('/host/settings')))).toBeNull()
     })
 
     it('redirects /auction to /login', async () => {
-      expect(locationOf(await middleware(req('/auction')))).toContain('/login')
+      expect(locationOf(await proxy(req('/auction')))).toContain('/login')
     })
 
     it('redirects /mobile to /login', async () => {
-      expect(locationOf(await middleware(req('/mobile')))).toContain('/login')
+      expect(locationOf(await proxy(req('/mobile')))).toContain('/login')
     })
   })
 
@@ -119,23 +119,23 @@ describe('middleware', () => {
     })
 
     it('redirects /login to /auction', async () => {
-      expect(locationOf(await middleware(req('/login')))).toContain('/auction')
+      expect(locationOf(await proxy(req('/login')))).toContain('/auction')
     })
 
     it('allows /auction through', async () => {
-      expect(locationOf(await middleware(req('/auction')))).toBeNull()
+      expect(locationOf(await proxy(req('/auction')))).toBeNull()
     })
 
     it('allows /mobile through', async () => {
-      expect(locationOf(await middleware(req('/mobile')))).toBeNull()
+      expect(locationOf(await proxy(req('/mobile')))).toBeNull()
     })
 
     it('redirects /host to /login', async () => {
-      expect(locationOf(await middleware(req('/host')))).toContain('/login')
+      expect(locationOf(await proxy(req('/host')))).toContain('/login')
     })
 
     it('redirects / to /login', async () => {
-      expect(locationOf(await middleware(req('/')))).toContain('/login')
+      expect(locationOf(await proxy(req('/')))).toContain('/login')
     })
   })
 
@@ -147,19 +147,19 @@ describe('middleware', () => {
     })
 
     it('redirects /login to /auction', async () => {
-      expect(locationOf(await middleware(req('/login')))).toContain('/auction')
+      expect(locationOf(await proxy(req('/login')))).toContain('/auction')
     })
 
     it('allows /auction through', async () => {
-      expect(locationOf(await middleware(req('/auction')))).toBeNull()
+      expect(locationOf(await proxy(req('/auction')))).toBeNull()
     })
 
     it('allows /mobile through', async () => {
-      expect(locationOf(await middleware(req('/mobile')))).toBeNull()
+      expect(locationOf(await proxy(req('/mobile')))).toBeNull()
     })
 
     it('redirects /host to /login', async () => {
-      expect(locationOf(await middleware(req('/host')))).toContain('/login')
+      expect(locationOf(await proxy(req('/host')))).toContain('/login')
     })
   })
 })

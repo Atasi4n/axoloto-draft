@@ -10,7 +10,7 @@ const ROLE_HOME: Record<UserRole, string> = {
   COACH:       '/auction',
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // /stream is public
@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request })
   }
 
-  // Build a middleware-compatible Supabase client.
+  // Build a proxy-compatible Supabase client.
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient<Database>(

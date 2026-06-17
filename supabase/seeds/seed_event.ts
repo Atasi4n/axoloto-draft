@@ -27,7 +27,8 @@
  * Safe to re-run for the same event — existing records are detected and skipped.
  */
 
-import 'dotenv/config'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 import { createClient } from '@supabase/supabase-js'
 import { EVENTS_CONFIG } from '../../apps/draft/src/lib/config/event.config'
 import { AUCTION_CONFIG } from '../../apps/draft/src/lib/config/auction.config'

@@ -8,7 +8,7 @@ import { HostWaitingRoom } from './HostWaitingRoom'
 import { HostControlPanel } from './HostControlPanel'
 
 export function HostApp({ eventId, userId }: { eventId: string; userId: string }) {
-  useAuctionRealtime(eventId)
+  const { error } = useAuctionRealtime(eventId)
   const online = usePresence(eventId, userId)
   const phase = useAuctionStore((s) => s.state?.phase ?? null)
 
@@ -19,7 +19,11 @@ export function HostApp({ eventId, userId }: { eventId: string; userId: string }
   if (phase === null && !devEvent) {
     return (
       <main className="flex flex-1 items-center justify-center bg-[#09090b]">
-        <p className="text-sm text-gray-500">Cargando…</p>
+        {error ? (
+          <p className="text-sm text-red-400">Error al cargar: {error}</p>
+        ) : (
+          <p className="text-sm text-gray-500">Cargando…</p>
+        )}
       </main>
     )
   }

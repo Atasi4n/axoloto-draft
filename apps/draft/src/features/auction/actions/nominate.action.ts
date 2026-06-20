@@ -1,6 +1,7 @@
 'use server'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { adminClient } from '@/lib/supabase/admin'
 import { validateNomination } from '@/features/auction/engine/validateNomination'
 import { AUCTION_CONFIG } from '@/lib/config/auction.config'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -119,7 +120,9 @@ export async function nominateAction({
 
     if (!validation.valid) return { success: false, error: validation.reason }
 
-    return openAuction(supabase, eventId, speciesId, 'PARTICIPANT', participant.id)
+    // Writes go through the service-role client (RLS has no participant write
+    // policies; the action already authenticated + validated above).
+    return openAuction(adminClient, eventId, speciesId, 'PARTICIPANT', participant.id)
   }
 
   // COACH path 
@@ -179,8 +182,8 @@ export async function nominateAction({
 
   if (!validation.valid) return { success: false, error: validation.reason }
 
-  // Decrement override counter before opening the auction
-  const { error: overrideError } = await supabase
+  // Decrement override counter before opening the auction (service-role write).
+  const { error: overrideError } = await adminClient
     .from('coach_participants')
     .update({ overrides_remaining: assignment.overrides_remaining - 1 })
     .eq('event_id', eventId)
@@ -192,7 +195,7 @@ export async function nominateAction({
   }
 
   return openAuction(
-    supabase,
+    adminClient,
     eventId,
     speciesId,
     'COACH_OVERRIDE',

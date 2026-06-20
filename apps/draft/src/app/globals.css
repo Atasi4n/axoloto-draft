@@ -84,7 +84,7 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: #09090b;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -115,6 +115,15 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+@keyframes wave-scroll-right {
+  from { background-position-x: 0; }
+  to { background-position-x: 52px; }
+}
+@keyframes wave-scroll-left {
+  from { background-position-x: 0; }
+  to { background-position-x: -52px; }
 }
 
 @layer base {

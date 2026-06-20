@@ -1,0 +1,362 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Undo2,
+  SkipForward,
+  Gift,
+  HelpCircle,
+  DollarSign,
+  Ban,
+  ArrowRight,
+  Play,
+} from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
+import { useAuctionStore } from '@/features/auction/hooks/useAuctionStore'
+import { getSnapshotAction } from '@/features/auction/actions/snapshot.action'
+import { TypeBadge } from '@/features/pokemon/components/TypeBadge'
+import { HostTopBar } from './HostTopBar'
+import {
+  skipTurnAction,
+  advancePhaseAction,
+  editBudgetAction,
+  resetToWaitingAction,
+  resolveAuctionAction,
+} from '@/features/auction/actions/host.actions'
+import { ConfirmModal } from './ConfirmModal'
+import { GiftPokemonModal } from './GiftPokemonModal'
+
+type ActionResult = { success: true } | { success: false; error: string }
+
+const CARD = 'rounded-xl border border-white/10 bg-[#0d0d12]'
+const SECTION = 'text-sm text-gray-400'
+
+// Medal styling for the top-3 bid rows.
+const MEDAL = [
+  { dot: '#f5d56b', ring: 'rgba(245,213,107,0.45)', bg: '#1b1710', text: '#f5d56b' },
+  { dot: '#c7ccd4', ring: 'rgba(199,204,212,0.35)', bg: '#16161c', text: '#e6e6ea' },
+  { dot: '#d98b4a', ring: 'rgba(217,139,74,0.45)', bg: '#1a130c', text: '#e0a96a' },
+]
+
+export function HostControlPanel({ eventId }: { eventId: string }) {
+  const participants = useAuctionStore((s) => s.participants)
+  const state = useAuctionStore((s) => s.state)
+  const turns = useAuctionStore((s) => s.turns)
+  const currentPokemon = useAuctionStore((s) => s.currentPokemon)
+  const currentBids = useAuctionStore((s) => s.currentBids)
+  const setSnapshot = useAuctionStore((s) => s.setSnapshot)
+
+  const [busy, setBusy] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  const [types, setTypes] = useState<string[]>([])
+  const [homeSprite, setHomeSprite] = useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [giftOpen, setGiftOpen] = useState(false)
+  const resolvingRef = useRef(false)
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // The auction snapshot only carries name + pixel sprite; the host shows the
+  // higher-res `sprite_home`, so fetch it (and types) from pokemon_meta.
+  useEffect(() => {
+    if (!currentPokemon) {
+      setTypes([])
+      setHomeSprite(null)
+      return
+    }
+    supabase
+      .from('pokemon_meta')
+      .select('types, sprite_home')
+      .eq('species_id', currentPokemon.species_id)
+      .single()
+      .then(({ data }) => {
+        setTypes((data?.types as string[] | null) ?? [])
+        setHomeSprite((data?.sprite_home as string | null) ?? null)
+      })
+  }, [currentPokemon])
+
+  async function run(fn: () => Promise<ActionResult>) {
+    setBusy(true)
+    const r = await fn()
+    if (!r.success) {
+      alert(r.error)
+    } else {
+      // Don't rely solely on realtime — refetch so the panel updates immediately.
+      const snap = await getSnapshotAction(eventId)
+      if (snap.success) setSnapshot(snap.data)
+    }
+    setBusy(false)
+  }
+
+  const nameOf = (pid: string | undefined) =>
+    participants.find((p) => p.id === pid)?.display_name ?? '—'
+
+  const isBidding = state?.status === 'BIDDING'
+  const currentTurn = turns.find((t) => t.id === state?.current_turn_id)
+  const dynamicText = isBidding
+    ? 'Pujando'
+    : currentTurn
+      ? `Turno de ${nameOf(currentTurn.participant_id)}`
+      : 'Esperando'
+
+  const remaining = state?.timer_ends_at
+    ? Math.max(0, Math.round((new Date(state.timer_ends_at).getTime() - now) / 1000))
+    : null
+
+  // When the timer hits 0, settle the auction (assign to the highest bidder).
+  // The host drives this; resolve_auction is idempotent so a stray re-call is safe.
+  useEffect(() => {
+    if (isBidding && remaining === 0 && !resolvingRef.current) {
+      resolvingRef.current = true
+      resolveAuctionAction(eventId).then(async (r) => {
+        if (r.success) {
+          const snap = await getSnapshotAction(eventId)
+          if (snap.success) setSnapshot(snap.data)
+        }
+        resolvingRef.current = false
+      })
+    }
+  }, [isBidding, remaining, eventId, setSnapshot])
+
+  // Pujas: the 5 highest bids (best bid per participant), amount desc,
+  // alphabetical tiebreak. Top-3 get gold/silver/bronze.
+  const pujaRows = useMemo(() => {
+    const best = new Map<string, number>()
+    currentBids.forEach((b) =>
+      best.set(b.participant_id, Math.max(best.get(b.participant_id) ?? 0, b.amount)),
+    )
+    return participants
+      .map((p) => ({ id: p.id, name: p.display_name, amount: best.get(p.id) ?? 0 }))
+      .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name))
+      .slice(0, 5)
+  }, [participants, currentBids])
+
+  // Turn order starting from the current turn.
+  const order = [...turns].sort((a, b) => a.position - b.position)
+  const curIdx = order.findIndex((t) => t.id === state?.current_turn_id)
+  const upcoming =
+    curIdx >= 0 ? [1, 2, 3].map((k) => order[(curIdx + k) % order.length]).filter(Boolean) : []
+
+  function onEditBudget(pid: string, current: number) {
+    const input = window.prompt('Nuevo presupuesto:', String(current))
+    if (input == null) return
+    const amount = parseInt(input, 10)
+    if (Number.isNaN(amount)) return
+    run(() => editBudgetAction(eventId, pid, amount))
+  }
+
+  const ctrl =
+    'flex items-center gap-3 rounded-lg border px-4 py-3 text-left text-base transition-colors disabled:opacity-50'
+  const ctrlNeutral = `${ctrl} border-white/10 bg-[#15151c] text-gray-200 hover:bg-[#1c1c24]`
+
+  return (
+    <main className="flex-1 overflow-y-auto bg-[#09090b] px-55 py-6">
+      <div className="mb-5 flex items-start justify-between">
+        <h1 className="text-lg font-medium text-white">
+          Liga de Inválidos <span className="text-gray-500">· Panel del host</span>
+        </h1>
+        <HostTopBar />
+      </div>
+
+      <div className="grid grid-cols-[1.6fr_1fr] gap-5">
+        {/* LEFT */}
+        <div className="flex flex-col gap-5">
+          <div className={`${CARD} p-5`}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <span className={SECTION}>Subasta en Curso</span>
+                {state?.phase && (
+                  <span className="rounded-md border border-violet-500/40 bg-violet-950/40 px-2.5 py-1 text-xs text-violet-200">
+                    Fase: {state.phase}
+                  </span>
+                )}
+              </div>
+              <span className="text-sm text-gray-400">{dynamicText}</span>
+            </div>
+            <div className="mt-3 flex items-center gap-4">
+              <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-[#15151c]">
+                {currentPokemon ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={homeSprite ?? currentPokemon.sprite_snapshot ?? ''}
+                    alt={currentPokemon.name_snapshot}
+                    className="h-16 w-16 object-contain"
+                  />
+                ) : (
+                  <span className="text-gray-600">—</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <div className="text-2xl font-medium text-white">
+                  {currentPokemon?.name_snapshot ?? 'Sin subasta'}
+                </div>
+                <div className="mt-1.5 flex gap-1.5">
+                  {types.map((t) => (
+                    <TypeBadge key={t} type={t} />
+                  ))}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-4xl font-medium text-white">
+                  {remaining != null ? `0:${String(remaining).padStart(2, '0')}` : '—'}
+                </div>
+                <div className="text-xs text-gray-500">restante</div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${CARD} p-5`}>
+            <span className={SECTION}>Pujas</span>
+            <div className="mt-3 flex flex-col gap-2">
+              {pujaRows.map((r, i) => {
+                const m = i < 3 ? MEDAL[i] : null
+                return (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between rounded-lg px-4 py-3"
+                    style={
+                      m
+                        ? { background: m.bg, outline: `1px solid ${m.ring}`, outlineOffset: '-1px' }
+                        : undefined
+                    }
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ background: m?.dot ?? '#52525b' }}
+                      />
+                      <span style={{ color: m?.text ?? '#9ca3af' }} className="font-medium">
+                        {r.name}
+                      </span>
+                    </span>
+                    <span style={{ color: m?.text ?? '#9ca3af' }} className="font-medium">
+                      {r.amount}$
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT */}
+        <div className="flex flex-col gap-4">
+          <span className="text-sm text-gray-300">Controles</span>
+          <div className="flex flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={() => alert('Deshacer puja: pendiente en el back (Eduardo).')}
+              className={`${ctrl} border-amber-700/ cursor-pointer bg-amber-950/30 text-amber-200`}
+            >
+              <Undo2 className="h-5 w-5" /> Deshacer puja
+            </button>
+            <button type="button" disabled={busy} onClick={() => run(() => skipTurnAction(eventId))} className={ctrlNeutral}>
+              <SkipForward className="h-5 w-5" /> Saltar Turno
+            </button>
+            <button
+              type="button"
+              onClick={() => setGiftOpen(true)}
+              className={`${ctrlNeutral} cursor-pointer`}
+            >
+              <Gift className="h-5 w-5" /> Regalar Pokemon
+            </button>
+            <button
+              type="button"
+              onClick={() => alert('Nominar (host): pendiente en el back (Eduardo).')}
+              className={`${ctrlNeutral} cursor-pointer`}
+            >
+              <HelpCircle className="h-5 w-5" /> Nominar
+            </button>
+            <button
+              type="button"
+              onClick={() => alert('Haz clic en el presupuesto de un participante (abajo) para editarlo.')}
+              className={`${ctrlNeutral} cursor-pointer`}
+            >
+              <DollarSign className="h-5 w-5" /> Editar Presupuesto
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmReset(true)}
+              className={`${ctrl} border-red-900/60 cursor-pointer bg-red-950/30 text-red-300 hover:bg-red-950/50`}
+            >
+              <Ban className="h-5 w-5" /> Cancelar Subasta
+            </button>
+          </div>
+
+          <div className={`${CARD} p-4`}>
+            <span className={SECTION}>Turno actual</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {currentTurn ? (
+                <span className="flex items-center gap-2 rounded-lg border border-[#3f6212] bg-[#0F1D0E] px-3 py-2 text-sm font-medium text-[#d9f99d]">
+                  <Play className="h-4 w-4" />
+                  {nameOf(currentTurn.participant_id)}
+                </span>
+              ) : (
+                <span className="text-sm text-gray-600">Sin turno</span>
+              )}
+              {upcoming.map((t) => (
+                <span key={t.id} className="flex items-center gap-2 text-gray-500">
+                  ›
+                  <span className="rounded-md border border-white/10 bg-[#15151c] px-2.5 py-1 text-xs text-gray-300">
+                    {nameOf(t.participant_id)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Presupuestos */}
+      <div className={`${CARD} mt-5 p-5`}>
+        <span className={SECTION}>Presupuestos</span>
+        <div className="mt-3 grid grid-cols-4 gap-3">
+          {participants.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              disabled={busy}
+              onClick={() => onEditBudget(p.id, p.budget)}
+              className="flex items-center justify-between rounded-lg border border-white/10 bg-[#15151c] px-4 py-3 text-left hover:bg-[#1c1c24]"
+            >
+              <span className="text-sm text-gray-300">{p.display_name}</span>
+              <span className="text-sm font-medium text-[#9fd47f]">{p.budget}$</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 flex justify-end">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run(() => advancePhaseAction(eventId))}
+          className="flex items-center gap-2 rounded-xl border cursor-pointer border-[#3f6212] bg-[#0F1D0E] px-7 py-3.5 text-base font-medium text-[#d9f99d] shadow-[0px_0px_29px_0px_rgba(48,110,25,0.25)] disabled:opacity-50"
+        >
+          <ArrowRight className="h-5 w-5" /> Avanzar fase
+        </button>
+      </div>
+
+      <ConfirmModal
+        open={confirmReset}
+        title="¿Volver a la sala de espera?"
+        message="Esto reinicia el evento a WAITING y borra el draft actual (turnos, pujas, equipos). Los presupuestos vuelven a 1000."
+        onConfirm={() => {
+          setConfirmReset(false)
+          run(() => resetToWaitingAction(eventId))
+        }}
+        onCancel={() => setConfirmReset(false)}
+      />
+
+      <GiftPokemonModal
+        eventId={eventId}
+        open={giftOpen}
+        onClose={() => setGiftOpen(false)}
+      />
+    </main>
+  )
+}

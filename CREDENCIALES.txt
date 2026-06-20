@@ -1,0 +1,34 @@
+==========================================================
+ LIGA DE INVÁLIDOS — Credenciales del evento
+ (válidas después de correr:  pnpm reset:pw)
+ El usuario NO distingue mayúsculas; la contraseña SÍ.
+==========================================================
+
+HOST
+  Usuario: host
+  Clave:   Hostinger
+
+----------------------------------------------------------
+ PAREJAS  (invalido  +  su coach)
+----------------------------------------------------------
+
+  1)  Chris      / ChrisInvalido        |  Said       / SaidCoach
+  2)  Elian      / ElianInvalido        |  Felix      / FelixCoach
+  3)  Alexa      / AlexaInvalido        |  Liam       / LiamCoach
+  4)  Joely      / JoelyInvalido        |  Nicolas    / NicolasCoach
+  5)  Armando    / ArmandoInvalido      |  Alexander  / AlexanderCoach
+  6)  Di         / DiInvalido           |  Poke       / PokeCoach
+  7)  Daniela    / DanielaInvalido      |  Hendrick   / HendrickCoach
+  8)  Emely      / EmelyInvalido        |  Eduardo    / EduardoCoach
+
+----------------------------------------------------------
+ INVÁLIDOS (lista plana)            COACHES (lista plana)
+----------------------------------------------------------
+  Chris    / ChrisInvalido          Said       / SaidCoach
+  Elian    / ElianInvalido          Felix      / FelixCoach
+  Alexa    / AlexaInvalido          Liam       / LiamCoach
+  Joely    / JoelyInvalido          Nicolas    / NicolasCoach
+  Armando  / ArmandoInvalido        Alexander  / AlexanderCoach
+  Di       / DiInvalido             Poke       / PokeCoach
+  Daniela  / DanielaInvalido        Hendrick   / HendrickCoach
+  Emely    / EmelyInvalido          Eduardo    / EduardoCoach

@@ -6,8 +6,8 @@ import type { UserRole } from '@/types/auction.types'
 // Where each role lands after login
 const ROLE_HOME: Record<UserRole, string> = {
   HOST:        '/host',
-  PARTICIPANT: '/auction',
-  COACH:       '/auction',
+  PARTICIPANT: '/mobile',
+  COACH:       '/mobile',
 }
 
 export async function proxy(request: NextRequest) {
@@ -72,8 +72,8 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  // /auction/* and /mobile/* - PARTICIPANT or COACH only
-  if (pathname.startsWith('/auction') || pathname.startsWith('/mobile')) {
+  // /mobile/* - PARTICIPANT or COACH only
+  if (pathname.startsWith('/mobile')) {
     if (role !== 'PARTICIPANT' && role !== 'COACH') {
       return redirectWith(request, response, '/login')
     }

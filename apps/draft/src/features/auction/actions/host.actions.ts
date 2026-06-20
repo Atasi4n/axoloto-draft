@@ -1,7 +1,9 @@
 'use server'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { adminClient }   from '@/lib/supabase/admin'
 import { startEvent }    from '@/features/auction/engine/startEvent'
+import { resolveAuction } from '@/features/auction/engine/resolveAuction'
 import { advanceTurn }   from '@/features/auction/engine/advanceTurn'
 import { checkMegaPhase } from '@/features/auction/engine/checkMegaPhase'
 import { AUCTION_CONFIG } from '@/lib/config/auction.config'
@@ -347,6 +349,62 @@ export async function advancePhaseAction(eventId: string): Promise<ActionResult>
   if (updateError) {
     return { success: false, error: 'Failed to advance phase.' }
   }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// resolveAuction — settle the current auction (assign to highest bidder, deduct
+// budget, advance turn). Idempotent via the resolve_auction RPC. Triggered by
+// the host panel when the timer hits 0.
+// ---------------------------------------------------------------------------
+export async function resolveAuctionAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const result = await resolveAuction(eventId)
+  if (!result.success) return { success: false, error: result.error }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// resetToWaiting — returns the whole event to its pre-start (WAITING) state.
+// Clears draft data + restores budgets. Host-gated; runs via the service-role
+// client (server-side only) so it can clear append-only/locked tables cleanly.
+// ---------------------------------------------------------------------------
+export async function resetToWaitingAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  // Clear the auction_state FK references FIRST (current_turn_id →
+  // auction_turns, current_auction_pokemon_id → auction_pokemon), otherwise the
+  // deletes below fail the FK constraint and leave orphan rows.
+  await adminClient
+    .from('auction_state')
+    .update({
+      phase:                      'WAITING',
+      status:                     'IDLE',
+      current_turn_id:            null,
+      current_auction_pokemon_id: null,
+      timer_ends_at:              null,
+      host_override_active:       false,
+    })
+    .eq('event_id', eventId)
+
+  await adminClient.from('bids').delete().eq('event_id', eventId)
+  await adminClient.from('team_pokemon').delete().eq('event_id', eventId)
+  await adminClient.from('auction_pokemon').delete().eq('event_id', eventId)
+  await adminClient.from('auction_turns').delete().eq('event_id', eventId)
+
+  await adminClient
+    .from('participants')
+    .update({
+      budget:              AUCTION_CONFIG.INITIAL_BUDGET,
+      has_mega:            false,
+      special_session_won: false,
+    })
+    .eq('event_id', eventId)
 
   return { success: true }
 }

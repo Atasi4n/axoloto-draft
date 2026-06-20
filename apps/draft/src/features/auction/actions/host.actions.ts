@@ -6,6 +6,7 @@ import { startEvent }    from '@/features/auction/engine/startEvent'
 import { resolveAuction } from '@/features/auction/engine/resolveAuction'
 import { advanceTurn }   from '@/features/auction/engine/advanceTurn'
 import { checkMegaPhase } from '@/features/auction/engine/checkMegaPhase'
+import { validateNomination } from '@/features/auction/engine/validateNomination'
 import { AUCTION_CONFIG } from '@/lib/config/auction.config'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.types'
@@ -405,6 +406,129 @@ export async function resetToWaitingAction(eventId: string): Promise<ActionResul
       special_session_won: false,
     })
     .eq('event_id', eventId)
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// undoLastBid — deletes the most recent bid on the active auction and resets
+// the timer. Host-only escape hatch for bid entry mistakes.
+// ---------------------------------------------------------------------------
+export async function undoLastBidAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: state, error: stateError } = await auth.supabase
+    .from('auction_state')
+    .select('status, current_auction_pokemon_id')
+    .eq('event_id', eventId)
+    .single()
+
+  if (stateError || !state) return { success: false, error: 'Auction state not found.' }
+  if (state.status !== 'BIDDING') return { success: false, error: 'No active auction.' }
+  if (!state.current_auction_pokemon_id) return { success: false, error: 'No active auction pokemon.' }
+
+  const { data: lastBid, error: bidError } = await auth.supabase
+    .from('bids')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('auction_pokemon_id', state.current_auction_pokemon_id)
+    .order('placed_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (bidError || !lastBid) return { success: false, error: 'No bids to undo.' }
+
+  const { error: deleteError } = await adminClient
+    .from('bids')
+    .delete()
+    .eq('id', lastBid.id)
+
+  if (deleteError) return { success: false, error: 'Failed to undo bid.' }
+
+  // Reset timer so participants have a fresh window to rebid
+  const timerEndsAt = new Date(
+    Date.now() + AUCTION_CONFIG.TIMER_SECONDS * 1000
+  ).toISOString()
+
+  const { error: timerError } = await auth.supabase
+    .from('auction_state')
+    .update({ timer_ends_at: timerEndsAt })
+    .eq('event_id', eventId)
+
+  if (timerError) return { success: false, error: 'Failed to reset timer.' }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// nominateHost — host nominates a pokemon to open a new auction round.
+// Used when the current participant delegates nomination to the host.
+// participantId: the participant on whose turn this falls; if no bids come in,
+// resolve_auction assigns the pokemon to them at MIN_BID.
+// ---------------------------------------------------------------------------
+export async function nominateHostAction(
+  eventId:       string,
+  speciesId:     number,
+  participantId: string | null = null,
+): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: state, error: stateError } = await auth.supabase
+    .from('auction_state')
+    .select('phase, status')
+    .eq('event_id', eventId)
+    .single()
+
+  if (stateError || !state) return { success: false, error: 'Auction state not found.' }
+  if (state.status === 'BIDDING') return { success: false, error: 'An auction is already in progress.' }
+  if (state.phase !== 'MEGA' && state.phase !== 'MAIN') {
+    return { success: false, error: `Cannot nominate during the ${state.phase} phase.` }
+  }
+
+  const validation = await validateNomination({ eventId, speciesId, nominatedBy: 'HOST' })
+  if (!validation.valid) return { success: false, error: validation.reason }
+
+  const { data: pokemon, error: pokemonError } = await auth.supabase
+    .from('pokemon_meta')
+    .select('name, sprite_front, is_mega_capable')
+    .eq('species_id', speciesId)
+    .single()
+
+  if (pokemonError || !pokemon) return { success: false, error: 'Pokemon not found.' }
+
+  const { data: auctionPokemon, error: insertError } = await adminClient
+    .from('auction_pokemon')
+    .insert({
+      event_id:                    eventId,
+      species_id:                  speciesId,
+      name_snapshot:               pokemon.name,
+      sprite_snapshot:             pokemon.sprite_front,
+      is_mega_capable:             pokemon.is_mega_capable,
+      nominated_by:                'HOST' as const,
+      nominated_by_participant_id: participantId,
+      status:                      'ACTIVE',
+    })
+    .select('id')
+    .single()
+
+  if (insertError || !auctionPokemon) return { success: false, error: 'Failed to create auction.' }
+
+  const timerEndsAt = new Date(
+    Date.now() + AUCTION_CONFIG.TIMER_SECONDS * 1000
+  ).toISOString()
+
+  const { error: stateUpdateError } = await adminClient
+    .from('auction_state')
+    .update({
+      status:                     'BIDDING',
+      current_auction_pokemon_id: auctionPokemon.id,
+      timer_ends_at:              timerEndsAt,
+    })
+    .eq('event_id', eventId)
+
+  if (stateUpdateError) return { success: false, error: 'Failed to open bidding.' }
 
   return { success: true }
 }

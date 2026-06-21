@@ -88,24 +88,24 @@ export function CoachInEventScreen({
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center gap-7 overflow-y-auto bg-[#09090b] px-0 py-8">
+    <main className="flex flex-1 flex-col items-center gap-4 overflow-y-auto bg-[#09090b] px-4 pb-5 pt-16">
       <h1 className="text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)]">
         Tu equipo
       </h1>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid w-full max-w-[20rem] grid-cols-3 gap-3">
         {SLOTS.map((i) => {
           const mon = team[i]
           return (
             <div
               key={i}
-              className="relative flex h-24 w-24 items-center justify-center rounded-lg bg-[#09090b] outline outline-2 -outline-offset-2 outline-[#374151]"
+              className="relative flex aspect-square items-center justify-center rounded-lg bg-[#09090b] outline outline-2 -outline-offset-2 outline-[#374151]"
             >
               {mon?.sprite_snapshot ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={mon.sprite_snapshot} alt={mon.name_snapshot} className="h-25 w-25 object-contain" />
+                <img src={mon.sprite_snapshot} alt={mon.name_snapshot} className="h-full w-full scale-110 object-contain" />
               ) : (
-                <svg viewBox="0 0 100 100" aria-hidden className="h-20 w-20 text-[#101116]">
+                <svg viewBox="0 0 100 100" aria-hidden className="h-3/4 w-3/4 text-[#101116]">
                   <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="5" />
                   <line x1="12" y1="50" x2="88" y2="50" stroke="currentColor" strokeWidth="5" />
                   <circle cx="50" cy="50" r="13" fill="#09090b" stroke="currentColor" strokeWidth="5" />
@@ -113,7 +113,7 @@ export function CoachInEventScreen({
               )}
               {mon?.is_mega_capable && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src="/mega.png" alt="Mega" className="pointer-events-none absolute -left-2 -top-3 h-16 w-auto" />
+                <img src="/mega.png" alt="Mega" className="pointer-events-none absolute -left-1 -top-2 h-[55%] w-auto" />
               )}
             </div>
           )
@@ -142,7 +142,7 @@ export function CoachInEventScreen({
 
       {/* Objeción — coach override; disappears once used up */}
       {hasOverrides && (
-        <div className="mt-auto flex flex-col items-center gap-3 pb-2">
+        <div className="mt-auto flex w-full flex-col items-center gap-3 pb-2">
           <p className="text-sm font-medium text-white">
             Este es tu boton de objecion, solo tienes 1.
           </p>
@@ -152,8 +152,8 @@ export function CoachInEventScreen({
             onClick={() => setSearchOpen(true)}
             className={
               canObject
-                ? 'h-16 w-80 rounded-xl bg-[#111827] text-2xl font-semibold text-indigo-300 shadow-[0px_0px_46px_0px_rgba(38,76,144,0.25)] outline outline-2 -outline-offset-2 outline-[#1e3a8a]'
-                : 'h-16 w-80 rounded-xl bg-[#171717] text-2xl font-medium text-neutral-400/25 outline outline-2 -outline-offset-2 outline-[#525252]'
+                ? 'h-16 w-full rounded-xl bg-[#111827] text-2xl font-semibold text-indigo-300 shadow-[0px_0px_46px_0px_rgba(38,76,144,0.25)] outline outline-2 -outline-offset-2 outline-[#1e3a8a]'
+                : 'h-16 w-full rounded-xl bg-[#171717] text-2xl font-medium text-neutral-400/25 outline outline-2 -outline-offset-2 outline-[#525252]'
             }
           >
             ¡OBJECIÓN!

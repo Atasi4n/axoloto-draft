@@ -28,10 +28,10 @@ const ROLE_LABEL: Record<UserRole, string> = {
 // Top-left "who am I" tag so participants/coaches always see whose screen this is.
 function WhoAmI({ name, role }: { name: string | null; role: UserRole }) {
   return (
-    <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full border border-white/10 bg-[#15151c] px-3 py-1.5">
-      <User className="h-4 w-4 text-gray-400" />
-      <span className="text-sm font-medium text-white">{name ?? '—'}</span>
-      <span className="text-xs text-gray-500">· {ROLE_LABEL[role]}</span>
+    <div className="absolute left-3 top-3 z-10 flex max-w-[55vw] items-center gap-2 rounded-full border border-white/10 bg-[#15151c] px-3 py-1.5">
+      <User className="h-4 w-4 shrink-0 text-gray-400" />
+      <span className="truncate text-sm font-medium text-white">{name ?? '—'}</span>
+      <span className="shrink-0 text-xs text-gray-500">· {ROLE_LABEL[role]}</span>
     </div>
   )
 }

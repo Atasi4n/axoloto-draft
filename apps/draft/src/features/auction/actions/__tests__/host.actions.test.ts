@@ -261,21 +261,21 @@ describe('assignPokemonAction', () => {
     expect(result).toEqual({ success: false, error: expect.stringContaining('full') })
   })
 
-  it('returns success and calls advanceTurn + checkMegaPhase on the happy path', async () => {
+  it('returns success WITHOUT advancing the turn (a gift must not consume the turn)', async () => {
     const supabase = buildHostClient()
     supabase.from
       .mockReturnValueOnce(q({ data: MOCK_POKEMON_META }))              // pokemon_meta
       .mockReturnValueOnce(qCount(0))                                    // species not on team
       .mockReturnValueOnce(qCount(3))                                    // team size = 3 (room)
-      .mockReturnValueOnce(q({ data: { status: 'IDLE', current_auction_pokemon_id: null } }))
+      .mockReturnValueOnce(q({ data: { status: 'IDLE', current_auction_pokemon_id: null } })) // auction_state
       .mockReturnValueOnce(q({ data: { id: 'auction-pokemon-uuid' } })) // auction_pokemon insert
       .mockReturnValueOnce(q({ data: null }))                           // team_pokemon insert
-      .mockReturnValueOnce(q({ data: null }))                           // reset auction_state
     vi.mocked(createSupabaseServerClient).mockResolvedValue(supabase as any)
 
     const result = await assignPokemonAction(EVENT_ID, SPECIES_ID, PARTICIPANT_ID)
 
-    expect(advanceTurn).toHaveBeenCalledWith(EVENT_ID)
+    // Gifting during a quiet (IDLE) turn must not advance the turn pointer.
+    expect(advanceTurn).not.toHaveBeenCalled()
     expect(checkMegaPhase).toHaveBeenCalledWith(EVENT_ID)
     expect(result).toEqual({ success: true })
   })

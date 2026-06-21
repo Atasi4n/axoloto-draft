@@ -1,24 +1,7 @@
 'use server'
 
 import { adminClient } from '@/lib/supabase/admin'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AuctionPhase, AuctionStatus } from '@/types/auction.types'
-
-// `pokemon_forms` exists in the DB but isn't in the generated Database types yet
-// (pending a regen). Type the rows we read locally and reach it via an untyped client.
-type PokemonFormDbRow = {
-  is_default:      boolean
-  is_mega:         boolean
-  form_label:      string | null
-  sprite_home:     string | null
-  types:           string[] | null
-  hp:              number | null
-  attack:          number | null
-  defense:         number | null
-  special_attack:  number | null
-  special_defense: number | null
-  speed:           number | null
-}
 
 export type StreamStat = { label: string; value: number }
 
@@ -129,7 +112,7 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
           .select('sprite_home, types, hp, attack, defense, special_attack, special_defense, speed')
           .eq('species_id', speciesId)
           .single(),
-        (adminClient as unknown as SupabaseClient)
+        adminClient
           .from('pokemon_forms')
           .select('is_default, is_mega, form_label, sprite_home, types, hp, attack, defense, special_attack, special_defense, speed')
           .eq('species_id', speciesId)
@@ -137,7 +120,7 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
           .order('form_id', { ascending: true }),
       ])
 
-      const formRows = (formsR.data as PokemonFormDbRow[] | null) ?? []
+      const formRows = formsR.data ?? []
       const forms: FormVariant[] = formRows.map((f) => {
         const stats = buildStats(f)
         return {

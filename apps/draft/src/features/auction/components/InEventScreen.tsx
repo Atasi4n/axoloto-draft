@@ -134,29 +134,29 @@ export function InEventScreen({
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center gap-7 overflow-y-auto bg-[#09090b] px-0 py-8">
+    <main className="flex flex-1 flex-col items-center gap-4 overflow-y-auto bg-[#09090b] px-4 pb-5 pt-16">
       <h1 className="text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)]">
         Tu equipo
       </h1>
 
-      {/* Team grid — 6 slots */}
-      <div className="grid grid-cols-3 gap-5">
+      {/* Team grid — 6 fluid slots that scale with the phone width */}
+      <div className="grid w-full max-w-[20rem] grid-cols-3 gap-3">
         {SLOTS.map((i) => {
           const mon = team[i]
           return (
             <div
               key={i}
-              className="relative flex h-24 w-24 items-center justify-center rounded-lg bg-[#09090b] outline outline-2 -outline-offset-2 outline-[#374151]"
+              className="relative flex aspect-square items-center justify-center rounded-lg bg-[#09090b] outline outline-2 -outline-offset-2 outline-[#374151]"
             >
               {mon?.sprite_snapshot ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={mon.sprite_snapshot}
                   alt={mon.name_snapshot}
-                  className="h-25 w-25 object-contain"
+                  className="h-full w-full scale-110 object-contain"
                 />
               ) : (
-                <svg viewBox="0 0 100 100" aria-hidden className="h-20 w-20 text-[#101116]">
+                <svg viewBox="0 0 100 100" aria-hidden className="h-3/4 w-3/4 text-[#101116]">
                   <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="5" />
                   <line x1="12" y1="50" x2="88" y2="50" stroke="currentColor" strokeWidth="5" />
                   <circle cx="50" cy="50" r="13" fill="#09090b" stroke="currentColor" strokeWidth="5" />
@@ -167,7 +167,7 @@ export function InEventScreen({
                 <img
                   src="/mega.png"
                   alt="Mega"
-                  className="pointer-events-none absolute -left-2 -top-3 h-16 w-auto"
+                  className="pointer-events-none absolute -left-1 -top-2 h-[55%] w-auto"
                 />
               )}
             </div>
@@ -195,6 +195,9 @@ export function InEventScreen({
         </div>
       </div>
 
+      {/* Spacer — pushes the action controls to the bottom, filling the height. */}
+      <div className="flex-1" />
+
       {/* Buscar — nominate (enabled only on your turn) */}
       <button
         type="button"
@@ -202,16 +205,16 @@ export function InEventScreen({
         onClick={() => setSearchOpen(true)}
         className={
           canSearch
-            ? 'h-16 w-80 rounded-xl bg-[#111827] text-2xl font-semibold text-indigo-300 shadow-[0px_0px_46px_0px_rgba(38,76,144,0.25)] outline outline-2 -outline-offset-2 outline-[#1e3a8a]'
-            : 'h-16 w-80 rounded-xl bg-[#171717] text-2xl font-medium text-neutral-400/25 outline outline-2 -outline-offset-2 outline-[#525252]'
+            ? 'h-16 w-full max-w-[20rem] rounded-xl bg-[#111827] text-2xl font-semibold text-indigo-300 shadow-[0px_0px_46px_0px_rgba(38,76,144,0.25)] outline outline-2 -outline-offset-2 outline-[#1e3a8a]'
+            : 'h-16 w-full max-w-[20rem] rounded-xl bg-[#171717] text-2xl font-medium text-neutral-400/25 outline outline-2 -outline-offset-2 outline-[#525252]'
         }
       >
         Buscar
       </button>
 
-      {/* Bid controls — the textbox is the exact bid; +N bumps it; › submits.
-          Enabled only while bidding (2s cooldown between submits). */}
-      <div className="flex w-full max-w-[25rem] flex-col items-center gap-4 px-2">
+      {/* Bid controls — full width; the textbox is the exact bid; +N bumps it;
+          › submits. Enabled only while bidding (2s cooldown between submits). */}
+      <div className="flex w-full flex-col items-center gap-4">
         <div className="flex w-full items-center gap-3">
           <div className="flex h-14 flex-1 items-center rounded-xl bg-[#09090b] px-4 outline outline-2 -outline-offset-2 outline-[#374151]">
             <input

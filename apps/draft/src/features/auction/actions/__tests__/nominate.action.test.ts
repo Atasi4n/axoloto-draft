@@ -39,6 +39,7 @@ function buildParticipantClient() {
   mockAdminFrom
     .mockReturnValueOnce(q({ data: MOCK_POKEMON_META }))                  // pokemon_meta
     .mockReturnValueOnce(q({ data: { id: 'auction-pokemon-uuid' } }))    // auction_pokemon insert
+    .mockReturnValueOnce(q({ data: null }))                               // opening bid insert
     .mockReturnValueOnce(q({ data: null }))                               // auction_state update
   return supabase
 }
@@ -59,6 +60,7 @@ function buildCoachClient() {
     .mockReturnValueOnce(q({ data: null }))                               // decrement overrides
     .mockReturnValueOnce(q({ data: MOCK_POKEMON_META }))                  // pokemon_meta
     .mockReturnValueOnce(q({ data: { id: 'auction-pokemon-uuid' } }))    // auction_pokemon insert
+    .mockReturnValueOnce(q({ data: null }))                               // opening bid insert
     .mockReturnValueOnce(q({ data: null }))                               // auction_state update
   return supabase
 }

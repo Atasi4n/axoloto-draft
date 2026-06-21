@@ -16,7 +16,7 @@ export default async function MobilePage() {
           <br />
           <span className="text-gray-600">({ctx.error})</span>
         </p>
-        <LogoutButton />
+        <LogoutButton withLabel />
       </main>
     );
   }

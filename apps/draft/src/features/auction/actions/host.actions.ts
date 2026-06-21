@@ -799,6 +799,17 @@ export async function nominateHostAction(
 
   if (insertError || !auctionPokemon) return { success: false, error: 'Failed to create auction.' }
 
+  // Auto opening bid: place the turn's participant as the standing bidder at
+  // MIN_BID so a host nomination with no further bids is won by them (not cancelled).
+  if (participantId) {
+    await adminClient.from('bids').insert({
+      event_id:           eventId,
+      auction_pokemon_id: auctionPokemon.id,
+      participant_id:     participantId,
+      amount:             AUCTION_CONFIG.MIN_BID,
+    })
+  }
+
   const timerEndsAt = new Date(
     Date.now() + AUCTION_CONFIG.TIMER_SECONDS * 1000
   ).toISOString()

@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100%;
+  /* Avoid the browser hijacking vertical drags as scroll while swiping. */
+  overscroll-behavior: none;
+}

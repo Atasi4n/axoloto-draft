@@ -79,6 +79,45 @@ export async function skipTurnAction(eventId: string): Promise<ActionResult> {
   const result = await advanceTurn(eventId)
   if (!result.success) return { success: false, error: result.error }
 
+  // Clear the nomination timer so the next turn starts fresh.
+  await auth.supabase
+    .from('auction_state')
+    .update({ timer_ends_at: null })
+    .eq('event_id', eventId)
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// startNominationTimer — sets the 2-minute nomination deadline for the current
+// turn. Host-driven; only while IDLE (not during bidding). Stored in
+// timer_ends_at so every screen (stream/host/mobile) shows the same countdown.
+// ---------------------------------------------------------------------------
+export async function startNominationTimerAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: state } = await auth.supabase
+    .from('auction_state')
+    .select('status')
+    .eq('event_id', eventId)
+    .single()
+
+  if (state?.status === 'BIDDING') {
+    return { success: false, error: 'Cannot start the nomination timer during bidding.' }
+  }
+
+  const timerEndsAt = new Date(
+    Date.now() + AUCTION_CONFIG.NOMINATION_SECONDS * 1000,
+  ).toISOString()
+
+  const { error } = await auth.supabase
+    .from('auction_state')
+    .update({ timer_ends_at: timerEndsAt })
+    .eq('event_id', eventId)
+
+  if (error) return { success: false, error: 'Failed to start the nomination timer.' }
+
   return { success: true }
 }
 

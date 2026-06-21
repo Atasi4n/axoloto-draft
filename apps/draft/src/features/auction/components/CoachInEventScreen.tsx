@@ -62,7 +62,8 @@ export function CoachInEventScreen({
   else dynamicText = `Turno de ${nameOf(currentTurn.participant_id)}`
 
   const hasOverrides = (overrides ?? 0) > 0
-  const canObject = isManagedTurn && !isBidding && hasOverrides
+  // Objeción only once the invalido has already put a pokemon up (BIDDING).
+  const canObject = isManagedTurn && isBidding && hasOverrides
 
   async function object(speciesId: number) {
     setSearchOpen(false)

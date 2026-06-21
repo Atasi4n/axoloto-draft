@@ -5,8 +5,7 @@ import {
   Undo2,
   SkipForward,
   Gift,
-  HelpCircle,
-  DollarSign,
+  Gavel,
   Ban,
   ArrowRight,
   Play,
@@ -15,6 +14,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuctionStore } from '@/features/auction/hooks/useAuctionStore'
 import { getSnapshotAction } from '@/features/auction/actions/snapshot.action'
 import { TypeBadge } from '@/features/pokemon/components/TypeBadge'
+import { SearchModal } from '@/features/auction/components/SearchModal'
 import { HostTopBar } from './HostTopBar'
 import {
   skipTurnAction,
@@ -22,7 +22,11 @@ import {
   editBudgetAction,
   resetToWaitingAction,
   resolveAuctionAction,
+  startNominationTimerAction,
+  nominateHostAction,
+  undoLastBidAction,
 } from '@/features/auction/actions/host.actions'
+import { formatMMSS } from '@/lib/utils'
 import { ConfirmModal } from './ConfirmModal'
 import { GiftPokemonModal } from './GiftPokemonModal'
 
@@ -52,7 +56,10 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
   const [homeSprite, setHomeSprite] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const [giftOpen, setGiftOpen] = useState(false)
+  const [nominateOpen, setNominateOpen] = useState(false)
   const resolvingRef = useRef(false)
+  const settingTimerRef = useRef(false)
+  const skippingRef = useRef(false)
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -103,13 +110,38 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
       : 'Esperando'
 
   const remaining = state?.timer_ends_at
-    ? Math.max(0, Math.round((new Date(state.timer_ends_at).getTime() - now) / 1000))
+    ? Math.max(0, Math.ceil((new Date(state.timer_ends_at).getTime() - now) / 1000))
     : null
 
-  // When the timer hits 0, settle the auction (assign to the highest bidder).
-  // The host drives this; resolve_auction is idempotent so a stray re-call is safe.
+  const isNominationPhase = state?.phase === 'MEGA' || state?.phase === 'MAIN'
+
+  // Start the 2-min nomination timer for a fresh turn (IDLE + no timer set).
   useEffect(() => {
-    if (isBidding && remaining === 0 && !resolvingRef.current) {
+    if (
+      isNominationPhase &&
+      state?.status === 'IDLE' &&
+      state?.current_turn_id &&
+      !state?.timer_ends_at &&
+      !settingTimerRef.current
+    ) {
+      settingTimerRef.current = true
+      startNominationTimerAction(eventId).then(async (r) => {
+        if (r.success) {
+          const snap = await getSnapshotAction(eventId)
+          if (snap.success) setSnapshot(snap.data)
+        }
+        settingTimerRef.current = false
+      })
+    }
+  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, eventId, setSnapshot])
+
+  // Timer hit 0: during BIDDING → resolve (assign to highest bidder); during
+  // a nomination turn → skip to the next turn. resolve/skip are idempotent-ish
+  // and clear the timer, so a stray re-call is safe.
+  useEffect(() => {
+    if (remaining !== 0) return
+
+    if (isBidding && !resolvingRef.current) {
       resolvingRef.current = true
       resolveAuctionAction(eventId).then(async (r) => {
         if (r.success) {
@@ -118,8 +150,17 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         }
         resolvingRef.current = false
       })
+    } else if (isNominationPhase && state?.status === 'IDLE' && state?.timer_ends_at && !skippingRef.current) {
+      skippingRef.current = true
+      skipTurnAction(eventId).then(async (r) => {
+        if (r.success) {
+          const snap = await getSnapshotAction(eventId)
+          if (snap.success) setSnapshot(snap.data)
+        }
+        skippingRef.current = false
+      })
     }
-  }, [isBidding, remaining, eventId, setSnapshot])
+  }, [remaining, isBidding, isNominationPhase, state?.status, state?.timer_ends_at, eventId, setSnapshot])
 
   // Pujas: the 5 highest bids (best bid per participant), amount desc,
   // alphabetical tiebreak. Top-3 get gold/silver/bronze.
@@ -201,7 +242,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
               </div>
               <div className="text-right">
                 <div className="font-mono text-4xl font-medium text-white">
-                  {remaining != null ? `0:${String(remaining).padStart(2, '0')}` : '—'}
+                  {remaining != null ? formatMMSS(remaining) : '—'}
                 </div>
                 <div className="text-xs text-gray-500">restante</div>
               </div>
@@ -248,12 +289,12 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
           <div className="flex flex-col gap-2.5">
             <button
               type="button"
-              onClick={() => alert('Deshacer puja: pendiente en el back (Eduardo).')}
-              className={`${ctrl} border-amber-700/ cursor-pointer bg-amber-950/30 text-amber-200`}
+              disabled={busy}
+              onClick={() =>
+                run(() => (isBidding ? resolveAuctionAction(eventId) : skipTurnAction(eventId)))
+              }
+              className={ctrlNeutral}
             >
-              <Undo2 className="h-5 w-5" /> Deshacer puja
-            </button>
-            <button type="button" disabled={busy} onClick={() => run(() => skipTurnAction(eventId))} className={ctrlNeutral}>
               <SkipForward className="h-5 w-5" /> Saltar Turno
             </button>
             <button
@@ -265,17 +306,27 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
             </button>
             <button
               type="button"
-              onClick={() => alert('Nominar (host): pendiente en el back (Eduardo).')}
-              className={`${ctrlNeutral} cursor-pointer`}
+              disabled={busy || isBidding || !currentTurn}
+              onClick={() => setNominateOpen(true)}
+              className={`${ctrlNeutral} cursor-pointer disabled:cursor-default disabled:opacity-40`}
             >
-              <HelpCircle className="h-5 w-5" /> Nominar
+              <Gavel className="h-5 w-5" /> Nominar
             </button>
             <button
               type="button"
-              onClick={() => alert('Haz clic en el presupuesto de un participante (abajo) para editarlo.')}
-              className={`${ctrlNeutral} cursor-pointer`}
+              disabled={busy || !isBidding}
+              onClick={() => run(() => undoLastBidAction(eventId))}
+              className={`${ctrl} border-amber-700/ cursor-pointer bg-amber-950/30 text-amber-200 disabled:cursor-default disabled:opacity-40`}
             >
-              <DollarSign className="h-5 w-5" /> Editar Presupuesto
+              <Undo2 className="h-5 w-5" /> Deshacer puja
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => run(() => advancePhaseAction(eventId))}
+              className={`${ctrl} border-[#3f6212] cursor-pointer bg-[#0F1D0E] text-[#d9f99d] disabled:cursor-default disabled:opacity-40`}
+            >
+              <ArrowRight className="h-5 w-5" /> Avanzar fase
             </button>
             <button
               type="button"
@@ -330,17 +381,6 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         </div>
       </div>
 
-      <div className="mt-5 flex justify-end">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => run(() => advancePhaseAction(eventId))}
-          className="flex items-center gap-2 rounded-xl border cursor-pointer border-[#3f6212] bg-[#0F1D0E] px-7 py-3.5 text-base font-medium text-[#d9f99d] shadow-[0px_0px_29px_0px_rgba(48,110,25,0.25)] disabled:opacity-50"
-        >
-          <ArrowRight className="h-5 w-5" /> Avanzar fase
-        </button>
-      </div>
-
       <ConfirmModal
         open={confirmReset}
         title="¿Volver a la sala de espera?"
@@ -356,6 +396,17 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         eventId={eventId}
         open={giftOpen}
         onClose={() => setGiftOpen(false)}
+      />
+
+      {/* Host nominates the pokemon for the current turn's participant. */}
+      <SearchModal
+        open={nominateOpen}
+        wide
+        onClose={() => setNominateOpen(false)}
+        onSelect={(speciesId) => {
+          setNominateOpen(false)
+          run(() => nominateHostAction(eventId, speciesId, currentTurn?.participant_id ?? null))
+        }}
       />
     </main>
   )

@@ -27,6 +27,7 @@ export function GiftPokemonModal({
     return (
       <SearchModal
         open
+        wide
         onClose={() => setParticipantId(null)}
         onSelect={async (speciesId) => {
           if (busy) return

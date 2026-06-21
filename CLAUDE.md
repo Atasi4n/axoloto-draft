@@ -101,7 +101,7 @@ On load: fetch full snapshot over HTTP first, THEN subscribe. Never rely on real
 
 ## Database schema (Postgres / Supabase)
 
-**Global:** `users` (id=auth.users.id, username, role HOST|PARTICIPANT|COACH) · `pokemon_meta` (species_id PK = national dex, name, is_mega_capable, sprite, types[], `ability`) · `events` (slug, status DRAFT|ACTIVE|ARCHIVED, config_key).
+**Global:** `users` (id=auth.users.id, username, role HOST|PARTICIPANT|COACH) · `pokemon_meta` (species_id PK = national dex, name, is_mega_capable, sprite, types[], `ability`) · `pokemon_forms` (form_id PK = PokéAPI pokemon.id; species_id FK→pokemon_meta; one row per battle-relevant form — base, megas, regional & ability/battle-mechanic forms; name, form_label, is_default, is_mega, is_battle_only, types[], sprites, stats; gmax/cosmetic excluded) · `events` (slug, status DRAFT|ACTIVE|ARCHIVED, config_key).
 
 **Event-scoped** (all carry `event_id`):
 - `participants` — budget (default 1000, CHECK ≥0), has_mega, special_session_won, connection_status. UNIQUE(event_id, user_id).

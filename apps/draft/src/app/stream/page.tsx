@@ -80,6 +80,23 @@ const TYPE_UI: Record<string, { label: string; bg: string; color: string; glow: 
   fairy: { label: 'Hada', bg: '#fda4af', color: '#be185d', glow: 'rgba(253,164,175,0.25)' },
 }
 
+const CONFETTI: { x: number; y: number; w: number; h: number; color: string; round?: boolean; rotate?: number }[] = [
+  { x: 381, y: 89, w: 12, h: 14, color: '#facc15', rotate: 24 },
+  { x: 1614, y: 42, w: 12, h: 14, color: '#facc15', rotate: -116 },
+  { x: 503, y: 89, w: 14, h: 14, color: '#facc15', round: true },
+  { x: 1522, y: -38, w: 14, h: 14, color: '#facc15', round: true, rotate: -139 },
+  { x: 170, y: 119, w: 14, h: 14, color: '#60a5fa', rotate: -24 },
+  { x: 1791, y: 157, w: 14, h: 14, color: '#60a5fa', rotate: -139 },
+  { x: 1283, y: 89, w: 12, h: 14, color: '#f472b6' },
+  { x: 625, y: 45, w: 12, h: 14, color: '#f472b6', rotate: 28 },
+  { x: 28, y: 65, w: 12, h: 14, color: '#f87171', rotate: -28 },
+  { x: 1862, y: 290, w: 12, h: 14, color: '#f87171', rotate: -139 },
+  { x: 1180, y: 116, w: 14, h: 14, color: '#a3e635', round: true },
+  { x: 1865, y: 116, w: 14, h: 14, color: '#a3e635', round: true },
+  { x: 112, y: 164, w: 12, h: 14, color: '#c084fc', rotate: 39 },
+  { x: 865, y: 89, w: 12, h: 14, color: '#c084fc', rotate: -139 },
+]
+
 function useStageScale() {
   const [stage, setStage] = useState({ scale: 1, left: 0, top: 0 })
 
@@ -376,6 +393,90 @@ const remaining = data?.timerEndsAt
   const phaseUi = data?.phase ? PHASE_UI[data.phase] : undefined
   const phaseLabel = phaseUi?.label ?? (data?.phase && data.phase !== 'WAITING' ? data.phase : '')
 
+  if (data?.phase === 'ENDED') {
+    return (
+      <main className="relative h-screen w-screen overflow-hidden bg-[#09090b]">
+        <div
+          className="absolute overflow-hidden bg-[#09090b] text-white"
+          style={{
+            width: DESIGN_WIDTH,
+            height: DESIGN_HEIGHT,
+            left: stage.left,
+            top: stage.top,
+            transform: `scale(${stage.scale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {/* Confetti */}
+          {CONFETTI.map((c, i) => (
+            <div
+              key={i}
+              className={c.round ? 'rounded-full' : 'rounded-sm'}
+              style={{
+                position: 'absolute',
+                left: c.x,
+                top: c.y,
+                width: c.w,
+                height: c.h,
+                backgroundColor: c.color,
+                transform: c.rotate ? `rotate(${c.rotate}deg)` : undefined,
+              }}
+            />
+          ))}
+
+          {/* Text block — left side */}
+          <div
+            className="absolute flex flex-col items-center gap-1.5"
+            style={{ left: 251, top: 394, width: 636 }}
+          >
+            <span
+              className={`${kaushan.className} text-center text-white`}
+              style={{
+                fontSize: 156,
+                lineHeight: '1',
+                textShadow: '0 0 15px rgba(255,255,255,1)',
+              }}
+            >
+              Fin
+            </span>
+            <span
+              className="w-full text-center text-5xl font-medium text-white"
+              style={{ textShadow: '0 0 6px rgba(255,255,255,1)' }}
+            >
+              ¡Gracias por participar!
+            </span>
+          </div>
+
+          {/* Floor shadow */}
+          <div
+            className="rounded-full bg-[#1f2937]"
+            style={{
+              position: 'absolute',
+              left: 1000,
+              top: 809,
+              width: 566,
+              height: 112,
+            }}
+          />
+          {/* Furret sleeping — sat lower than the Figma so the large gif reads
+              as grounded rather than floating mid-screen. */}
+          <img
+            src="/furret-sleep.gif"
+            alt="Furret durmiendo"
+            style={{
+              position: 'absolute',
+              left: 1073,
+              top: 453,
+              width: 421,
+              height: 411,
+              objectFit: 'contain',
+            }}
+          />
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-[#09090b]">
       <div
@@ -566,6 +667,7 @@ const remaining = data?.timerEndsAt
             max={timerMax}
             textStyle={TIMER_GLOW}
             waiting={data?.phase === 'WAITING'}
+            nomination={data?.status !== 'BIDDING'}
           />
         </section>
       </div>

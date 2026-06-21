@@ -18,17 +18,29 @@ function timerNumberColor(seconds: number) {
   return 'hsl(120 85% 55%)'
 }
 
+// Nominación (timer largo de 2 min): umbrales por segundos absolutos —
+// verde, amarillo al quedar 1 min, rojo al quedar 15s. Tiñe número y barra.
+function nominationColor(seconds: number) {
+  if (seconds <= 15) return '#f34444'
+  if (seconds <= 60) return '#ffdd57'
+  return 'hsl(120 85% 55%)'
+}
+
 export function StreamTimer({
   remaining,
   max = 30,
   textStyle,
   waiting = false,
+  nomination = false,
 }: {
   remaining: number
   max?: number
   textStyle?: CSSProperties
   // In the WAITING phase Furret stands still (static photo) instead of walking.
   waiting?: boolean
+  // Nomination timer (2 min): step colours by absolute seconds instead of the
+  // smooth gradient used by the 30s bidding timer.
+  nomination?: boolean
 }) {
   // Furret SIEMPRE mira a la izquierda; solo se voltea 0.5s al hacerse una puja.
   const [facingRight, setFacingRight] = useState(false)
@@ -58,8 +70,8 @@ export function StreamTimer({
   const sec = Math.max(0, Math.ceil(remaining))
   const frac = Math.max(0, Math.min(1, remaining / max))
 
-  const color = barColor(frac)
-  const numberColor = timerNumberColor(sec)
+  const color = nomination ? nominationColor(sec) : barColor(frac)
+  const numberColor = nomination ? nominationColor(sec) : timerNumberColor(sec)
 
   return (
     <div className="relative h-[132px] w-full">

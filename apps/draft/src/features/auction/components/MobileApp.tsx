@@ -7,6 +7,8 @@ import { useAuctionStore } from '@/features/auction/hooks/useAuctionStore'
 import { WaitingRoom, type WaitingVariant } from './WaitingRoom'
 import { InEventScreen } from './InEventScreen'
 import { CoachInEventScreen } from './CoachInEventScreen'
+import { EndedScreen } from './EndedScreen'
+import { CoachEndedScreen } from './CoachEndedScreen'
 import { LogoutButton } from '@/features/auth/components/LogoutButton'
 import { User } from 'lucide-react'
 import type { UserRole } from '@/types/auction.types'
@@ -111,11 +113,16 @@ export function MobileApp({ eventId, userId, role, displayName, counterpartUserI
   }
 
   // ENDED
+  if (role === 'COACH') {
+    return (
+      <Shell displayName={displayName} role={role}>
+        <CoachEndedScreen counterpartUserId={counterpartUserId} />
+      </Shell>
+    )
+  }
   return (
     <Shell displayName={displayName} role={role}>
-      <main className="flex flex-1 items-center justify-center bg-[#09090b]">
-        <p className="text-sm text-gray-400">evento finalizado · pendiente</p>
-      </main>
+      <EndedScreen userId={userId} />
     </Shell>
   )
 }

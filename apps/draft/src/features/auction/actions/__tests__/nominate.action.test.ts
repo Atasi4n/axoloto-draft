@@ -7,8 +7,14 @@ import {
   SPECIES_ID,
 } from '@/test/helpers'
 
+const mockAdminFrom = vi.hoisted(() => vi.fn())
+
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
+}))
+
+vi.mock('@/lib/supabase/admin', () => ({
+  adminClient: { from: mockAdminFrom },
 }))
 
 vi.mock('@/features/auction/engine/validateNomination', () => ({
@@ -22,13 +28,14 @@ const INPUT = { eventId: EVENT_ID, speciesId: SPECIES_ID }
 
 // Builds the full happy-path chain for the PARTICIPANT path.
 // validateNomination is mocked to return valid, so the chain is:
-//   users.role → participants row → auction_pokemon insert → auction_state update
+//   users.role → participants row → (adminClient) pokemon_meta → auction_pokemon insert → auction_state update
 function buildParticipantClient() {
   const { supabase } = makeMockClient()
   supabase.from
     .mockReturnValueOnce(q({ data: { role: 'PARTICIPANT' } }))
     .mockReturnValueOnce(q({ data: { id: PARTICIPANT_ID } }))             // participant row
-    // openAuction:
+  // openAuction uses adminClient:
+  mockAdminFrom
     .mockReturnValueOnce(q({ data: MOCK_POKEMON_META }))                  // pokemon_meta
     .mockReturnValueOnce(q({ data: { id: 'auction-pokemon-uuid' } }))    // auction_pokemon insert
     .mockReturnValueOnce(q({ data: null }))                               // auction_state update
@@ -44,8 +51,9 @@ function buildCoachClient() {
     .mockReturnValueOnce(q({ data: { current_turn_id: TURN_ID } }))       // auction_state
     .mockReturnValueOnce(q({ data: { participant_id: PARTICIPANT_ID } })) // current turn
     .mockReturnValueOnce(q({ data: { overrides_remaining: 2 } }))         // assignment
-    // validateNomination mocked below
-    // openAuction:
+  // validateNomination mocked below
+  // adminClient calls: decrement overrides + openAuction sequence
+  mockAdminFrom
     .mockReturnValueOnce(q({ data: null }))                               // decrement overrides
     .mockReturnValueOnce(q({ data: MOCK_POKEMON_META }))                  // pokemon_meta
     .mockReturnValueOnce(q({ data: { id: 'auction-pokemon-uuid' } }))    // auction_pokemon insert
@@ -55,6 +63,7 @@ function buildCoachClient() {
 
 beforeEach(() => {
   vi.mocked(validateNomination).mockResolvedValue({ valid: true })
+  mockAdminFrom.mockReset()
 })
 
 describe('nominateAction', () => {

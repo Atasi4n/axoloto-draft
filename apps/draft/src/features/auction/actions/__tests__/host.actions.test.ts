@@ -18,6 +18,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }))
 
+vi.mock('@/lib/supabase/admin', () => ({
+  adminClient: { from: vi.fn() },
+}))
+
 vi.mock('@/features/auction/engine/startEvent', () => ({
   startEvent: vi.fn(),
 }))
@@ -129,7 +133,9 @@ describe('skipTurnAction', () => {
 
   it('delegates to advanceTurn when no auction is running', async () => {
     const supabase = buildHostClient()
-    supabase.from.mockReturnValueOnce(q({ data: { status: 'IDLE' } }))
+    supabase.from
+      .mockReturnValueOnce(q({ data: { status: 'IDLE' } }))
+      .mockReturnValueOnce(q({ data: null }))  // timer clear update
     vi.mocked(createSupabaseServerClient).mockResolvedValue(supabase as any)
 
     const result = await skipTurnAction(EVENT_ID)

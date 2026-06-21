@@ -80,6 +80,7 @@ export type AuctionStateRow = {
   current_auction_pokemon_id:  string | null
   timer_ends_at:               string | null  // ISO timestamptz
   host_override_active:        boolean
+  paused_at:                   string | null  // ISO timestamptz; non-null = auction is paused
 }
 
 export type AuctionPokemonRow = {

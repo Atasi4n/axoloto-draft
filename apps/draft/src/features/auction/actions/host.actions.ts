@@ -157,13 +157,14 @@ export async function cancelAuctionAction(eventId: string): Promise<ActionResult
     return { success: false, error: 'Failed to cancel auction.' }
   }
 
-  // Reset auction_state to IDLE — same turn, no timer
+  // Reset auction_state to IDLE — same turn, no timer, no pause
   const { error: resetError } = await auth.supabase
     .from('auction_state')
     .update({
       status:                     'IDLE',
       current_auction_pokemon_id: null,
       timer_ends_at:              null,
+      paused_at:                  null,
     })
     .eq('event_id', eventId)
 
@@ -428,6 +429,7 @@ export async function resetToWaitingAction(eventId: string): Promise<ActionResul
       current_turn_id:            null,
       current_auction_pokemon_id: null,
       timer_ends_at:              null,
+      paused_at:                  null,
       host_override_active:       false,
     })
     .eq('event_id', eventId)
@@ -496,6 +498,245 @@ export async function undoLastBidAction(eventId: string): Promise<ActionResult> 
     .eq('event_id', eventId)
 
   if (timerError) return { success: false, error: 'Failed to reset timer.' }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// pauseAuction — freezes the bidding timer.
+// The cron / edge function that calls resolve_auction will skip while paused.
+// ---------------------------------------------------------------------------
+export async function pauseAuctionAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: state, error: stateError } = await auth.supabase
+    .from('auction_state')
+    .select('status, paused_at, timer_ends_at')
+    .eq('event_id', eventId)
+    .single()
+
+  if (stateError || !state) return { success: false, error: 'Auction state not found.' }
+  if (state.status !== 'BIDDING') return { success: false, error: 'No active auction to pause.' }
+  if (state.paused_at) return { success: false, error: 'Auction is already paused.' }
+
+  const { error } = await auth.supabase
+    .from('auction_state')
+    .update({ paused_at: new Date().toISOString() })
+    .eq('event_id', eventId)
+
+  if (error) return { success: false, error: 'Failed to pause auction.' }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// resumeAuction — unfreezes the bidding timer.
+// Recalculates timer_ends_at so participants have the remaining time left.
+// ---------------------------------------------------------------------------
+export async function resumeAuctionAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: state, error: stateError } = await auth.supabase
+    .from('auction_state')
+    .select('status, paused_at, timer_ends_at')
+    .eq('event_id', eventId)
+    .single()
+
+  if (stateError || !state) return { success: false, error: 'Auction state not found.' }
+  if (!state.paused_at) return { success: false, error: 'Auction is not paused.' }
+
+  const remainingMs = state.timer_ends_at
+    ? Date.parse(state.timer_ends_at) - Date.parse(state.paused_at)
+    : AUCTION_CONFIG.TIMER_SECONDS * 1000
+
+  // Guarantee at least 10 s so the resumed timer is visible
+  const newTimerEndsAt = new Date(
+    Date.now() + Math.max(remainingMs, 10_000)
+  ).toISOString()
+
+  const { error } = await auth.supabase
+    .from('auction_state')
+    .update({ paused_at: null, timer_ends_at: newTimerEndsAt })
+    .eq('event_id', eventId)
+
+  if (error) return { success: false, error: 'Failed to resume auction.' }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// removeTeamPokemon — removes a pokemon from a participant's team and refunds
+// the purchase price back to their budget.
+// ---------------------------------------------------------------------------
+export async function removeTeamPokemonAction(
+  eventId:       string,
+  teamPokemonId: string,
+): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: tp, error: tpError } = await adminClient
+    .from('team_pokemon')
+    .select('id, participant_id, purchase_price, is_mega_capable, event_id')
+    .eq('id', teamPokemonId)
+    .eq('event_id', eventId)
+    .single()
+
+  if (tpError || !tp) return { success: false, error: 'Team pokemon not found.' }
+
+  const { error: deleteError } = await adminClient
+    .from('team_pokemon')
+    .delete()
+    .eq('id', teamPokemonId)
+
+  if (deleteError) return { success: false, error: 'Failed to remove pokemon from team.' }
+
+  // Re-fetch current budget and add refund (no SQL arithmetic in typed client)
+  const { data: participant } = await adminClient
+    .from('participants')
+    .select('budget')
+    .eq('id', tp.participant_id)
+    .single()
+
+  const newBudget = (participant?.budget ?? 0) + tp.purchase_price
+
+  await adminClient
+    .from('participants')
+    .update({ budget: newBudget })
+    .eq('id', tp.participant_id)
+
+  if (tp.is_mega_capable) {
+    const { count: megaCount } = await adminClient
+      .from('team_pokemon')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .eq('participant_id', tp.participant_id)
+      .eq('is_mega_capable', true)
+
+    if ((megaCount ?? 0) === 0) {
+      await adminClient
+        .from('participants')
+        .update({ has_mega: false })
+        .eq('id', tp.participant_id)
+    }
+  }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// undoLastRound — reverses the last resolved auction: removes the team_pokemon,
+// refunds the budget, deletes bids, and rolls back the turn pointer by one.
+// Only allowed when no auction is currently active (status = IDLE/NOMINATING).
+// Note: does NOT reverse a phase transition (e.g. MEGA→MAIN).
+// ---------------------------------------------------------------------------
+export async function undoLastRoundAction(eventId: string): Promise<ActionResult> {
+  const auth = await requireHost()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: state, error: stateError } = await auth.supabase
+    .from('auction_state')
+    .select('status, current_turn_id')
+    .eq('event_id', eventId)
+    .single()
+
+  if (stateError || !state) return { success: false, error: 'Auction state not found.' }
+  if (state.status === 'BIDDING' || state.status === 'RESOLVING') {
+    return { success: false, error: 'Cannot undo while an auction is in progress.' }
+  }
+
+  // Find the last SOLD auction_pokemon that has a team_pokemon entry
+  const { data: lastAP, error: apError } = await adminClient
+    .from('auction_pokemon')
+    .select('id, is_mega_capable, name_snapshot, sold_price')
+    .eq('event_id', eventId)
+    .eq('status', 'SOLD')
+    .order('nominated_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (apError || !lastAP) return { success: false, error: 'No completed rounds to undo.' }
+
+  const { data: tp, error: tpError } = await adminClient
+    .from('team_pokemon')
+    .select('id, participant_id, purchase_price')
+    .eq('auction_pokemon_id', lastAP.id)
+    .single()
+
+  if (tpError || !tp) return { success: false, error: 'Team pokemon record not found for last round.' }
+
+  // Reverse: delete team_pokemon
+  await adminClient.from('team_pokemon').delete().eq('id', tp.id)
+
+  // Reverse: delete all bids for this auction
+  await adminClient.from('bids').delete().eq('auction_pokemon_id', lastAP.id)
+
+  // Reverse: mark auction_pokemon as CANCELLED
+  await adminClient
+    .from('auction_pokemon')
+    .update({ status: 'CANCELLED', sold_to: null, sold_price: null })
+    .eq('id', lastAP.id)
+
+  // Reverse: refund budget
+  const { data: participant } = await adminClient
+    .from('participants')
+    .select('budget')
+    .eq('id', tp.participant_id)
+    .single()
+
+  await adminClient
+    .from('participants')
+    .update({ budget: (participant?.budget ?? 0) + tp.purchase_price })
+    .eq('id', tp.participant_id)
+
+  // Reverse: has_mega flag if applicable
+  if (lastAP.is_mega_capable) {
+    const { count: megaCount } = await adminClient
+      .from('team_pokemon')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .eq('participant_id', tp.participant_id)
+      .eq('is_mega_capable', true)
+
+    if ((megaCount ?? 0) === 0) {
+      await adminClient
+        .from('participants')
+        .update({ has_mega: false })
+        .eq('id', tp.participant_id)
+    }
+  }
+
+  // Roll back turn: current_turn_id points to the NEXT turn after resolve;
+  // we need to go back one position to restore the nominator's turn.
+  const { data: allTurns } = await adminClient
+    .from('auction_turns')
+    .select('id, position')
+    .eq('event_id', eventId)
+    .order('position', { ascending: true })
+
+  if (allTurns && allTurns.length > 0 && state.current_turn_id) {
+    const current = allTurns.find(t => t.id === state.current_turn_id)
+    if (current) {
+      const maxPos    = allTurns[allTurns.length - 1].position
+      const prevPos   = current.position === 0 ? maxPos : current.position - 1
+      const prevTurn  = allTurns.find(t => t.position === prevPos)
+
+      if (prevTurn) {
+        await adminClient
+          .from('auction_state')
+          .update({
+            current_turn_id:            prevTurn.id,
+            status:                     'IDLE',
+            current_auction_pokemon_id: null,
+            timer_ends_at:              null,
+            paused_at:                  null,
+          })
+          .eq('event_id', eventId)
+      }
+    }
+  }
 
   return { success: true }
 }

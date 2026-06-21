@@ -16,16 +16,16 @@ export const AUCTION_CONFIG = {
 
   // Bans the entire species (all forms). Checked in validateNomination, never stored in the database.
   BANNED_SPECIES_IDS: [
-    9,    // Blastoise  → Mega Blastoise
-    94,   // Gengar     → Mega Gengar
-    121,  // Starmie    → Mega Starmie
-    448,  // Lucario    → Mega Lucario
+    // 9,    // Blastoise  → Mega Blastoise
+    // 94,   // Gengar     → Mega Gengar
+    // 121,  // Starmie    → Mega Starmie
+    // 448,  // Lucario    → Mega Lucario
   ] as const,
 
   // Base form is nominatable but does NOT satisfy the mega phase requirement.
   // The evolved/hero form is banned outright.
   BANNED_EVOLVED_FORMS: [
-    964,  // Palafin-Zero allowed; Palafin-Hero (Zero to Hero) banned
+    // 964,  // Palafin-Zero allowed; Palafin-Hero (Zero to Hero) banned
   ] as const,
 
   BAN_VIOLATION_PENALTY: 100,

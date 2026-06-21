@@ -27,6 +27,7 @@ function buildParticipantClient() {
   const { supabase } = makeMockClient()
   supabase.from
     .mockReturnValueOnce(q({ data: { role: 'PARTICIPANT' } }))
+    .mockReturnValueOnce(q({ data: { paused_at: null } }))                // auction_state pause check
     .mockReturnValueOnce(q({ data: { id: PARTICIPANT_ID } }))             // participant row
     // openAuction:
     .mockReturnValueOnce(q({ data: MOCK_POKEMON_META }))                  // pokemon_meta
@@ -40,6 +41,7 @@ function buildCoachClient() {
   const { supabase } = makeMockClient()
   supabase.from
     .mockReturnValueOnce(q({ data: { role: 'COACH' } }))
+    .mockReturnValueOnce(q({ data: { paused_at: null } }))                // auction_state pause check
     .mockReturnValueOnce(q({ data: { id: COACH_ID } }))                   // coach row
     .mockReturnValueOnce(q({ data: { current_turn_id: TURN_ID } }))       // auction_state
     .mockReturnValueOnce(q({ data: { participant_id: PARTICIPANT_ID } })) // current turn
@@ -84,6 +86,7 @@ describe('nominateAction', () => {
       const { supabase } = makeMockClient()
       supabase.from
         .mockReturnValueOnce(q({ data: { role: 'PARTICIPANT' } }))
+        .mockReturnValueOnce(q({ data: { paused_at: null } }))
         .mockReturnValueOnce(q({ data: null, error: { message: 'Not found' } }))
       vi.mocked(createSupabaseServerClient).mockResolvedValue(supabase as any)
 
@@ -96,6 +99,7 @@ describe('nominateAction', () => {
       const { supabase } = makeMockClient()
       supabase.from
         .mockReturnValueOnce(q({ data: { role: 'PARTICIPANT' } }))
+        .mockReturnValueOnce(q({ data: { paused_at: null } }))
         .mockReturnValueOnce(q({ data: { id: PARTICIPANT_ID } }))
       vi.mocked(createSupabaseServerClient).mockResolvedValue(supabase as any)
       vi.mocked(validateNomination).mockResolvedValue({ valid: false, reason: 'It is not your turn to nominate.' })
@@ -132,6 +136,7 @@ describe('nominateAction', () => {
       const { supabase } = makeMockClient()
       supabase.from
         .mockReturnValueOnce(q({ data: { role: 'COACH' } }))
+        .mockReturnValueOnce(q({ data: { paused_at: null } }))
         .mockReturnValueOnce(q({ data: null, error: { message: 'Not found' } }))
       vi.mocked(createSupabaseServerClient).mockResolvedValue(supabase as any)
 
@@ -144,6 +149,7 @@ describe('nominateAction', () => {
       const { supabase } = makeMockClient()
       supabase.from
         .mockReturnValueOnce(q({ data: { role: 'COACH' } }))
+        .mockReturnValueOnce(q({ data: { paused_at: null } }))
         .mockReturnValueOnce(q({ data: { id: COACH_ID } }))
         .mockReturnValueOnce(q({ data: { current_turn_id: TURN_ID } }))
         .mockReturnValueOnce(q({ data: { participant_id: PARTICIPANT_ID } }))

@@ -98,6 +98,17 @@ export async function nominateAction({
     return { success: false, error: 'Only participants and coaches can nominate.' }
   }
 
+  // Reject nominations/objections while the host has the auction paused.
+  const { data: pauseState } = await supabase
+    .from('auction_state')
+    .select('paused_at')
+    .eq('event_id', eventId)
+    .single()
+
+  if (pauseState?.paused_at) {
+    return { success: false, error: 'La subasta está pausada.' }
+  }
+
   // PARTICIPANT path
   if (userRow.role === 'PARTICIPANT') {
     const { data: participant } = await supabase

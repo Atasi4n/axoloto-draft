@@ -14,17 +14,21 @@ function barColor(frac: number) {
 function timerNumberColor(seconds: number) {
   if (seconds <= 5) return '#f34444'
   if (seconds <= 15) return '#ffdd57'
-  return '#ffffff'
+  // Green at full so the number matches the bar's green zone.
+  return 'hsl(120 85% 55%)'
 }
 
 export function StreamTimer({
   remaining,
   max = 30,
   textStyle,
+  waiting = false,
 }: {
   remaining: number
   max?: number
   textStyle?: CSSProperties
+  // In the WAITING phase Furret stands still (static photo) instead of walking.
+  waiting?: boolean
 }) {
   // Furret SIEMPRE mira a la izquierda; solo se voltea 0.5s al hacerse una puja.
   const [facingRight, setFacingRight] = useState(false)
@@ -84,15 +88,15 @@ export function StreamTimer({
       </div>
 
       <img
-        src="/furret-walk.gif"
+        src={waiting ? '/furret-stop.png' : '/furret-walk.gif'}
         alt=""
         className="absolute top-[57px] h-[58px] w-auto object-contain"
         style={{
           left: `calc(${frac * 100}% - ${frac * 72}px)`,
 
-          // Normalmente mira hacia la izquierda.
+          // Normalmente mira hacia la izquierda (igual que la foto en pausa/espera).
           // Cuando una puja sube el timer, mira hacia la derecha por 0.5s.
-          transform: facingRight ? 'scaleX(-1)' : 'none',
+          transform: !waiting && facingRight ? 'scaleX(-1)' : 'none',
 
           transition: 'left 0.25s linear, transform 0.15s',
         }}

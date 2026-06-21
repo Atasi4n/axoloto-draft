@@ -51,19 +51,22 @@ export function CoachInEventScreen({
   }, [managed?.id, eventId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isBidding = state?.status === 'BIDDING'
+  const isPaused = !!state?.paused_at
   const currentTurn = turns.find((t) => t.id === state?.current_turn_id)
   const isManagedTurn = !!currentTurn && !!managed && currentTurn.participant_id === managed.id
   const nameOf = (pid: string | undefined) =>
     participants.find((p) => p.id === pid)?.display_name ?? '—'
 
   let dynamicText: string
-  if (isBidding) dynamicText = 'Pujando'
+  if (isPaused) dynamicText = 'En pausa ⏸'
+  else if (isBidding) dynamicText = 'Pujando'
   else if (!currentTurn) dynamicText = 'Esperando…'
   else dynamicText = `Turno de ${nameOf(currentTurn.participant_id)}`
 
   const hasOverrides = (overrides ?? 0) > 0
-  // Objeción only once the invalido has already put a pokemon up (BIDDING).
-  const canObject = isManagedTurn && isBidding && hasOverrides
+  // Objeción only once the invalido has already put a pokemon up (BIDDING),
+  // and never while the host has the auction paused.
+  const canObject = isManagedTurn && isBidding && hasOverrides && !isPaused
 
   async function object(speciesId: number) {
     setSearchOpen(false)

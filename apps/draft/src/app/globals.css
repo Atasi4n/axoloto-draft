@@ -126,6 +126,12 @@
   to { background-position-x: -52px; }
 }
 
+/* Stream: pokemon form-change countdown bar depletes over the interval. */
+@keyframes formCountdown {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

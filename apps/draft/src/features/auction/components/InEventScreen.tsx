@@ -56,12 +56,14 @@ export function InEventScreen({
   const budget = me?.budget ?? 0
 
   const isBidding = state?.status === 'BIDDING'
+  const isPaused = !!state?.paused_at
   const currentTurn = turns.find((t) => t.id === state?.current_turn_id)
   const turnParticipant = participants.find((p) => p.id === currentTurn?.participant_id)
   const isMyTurn = !!turnParticipant && turnParticipant.user_id === userId
 
   let dynamicText: string
-  if (isBidding) dynamicText = 'Pujando'
+  if (isPaused) dynamicText = 'En pausa ⏸'
+  else if (isBidding) dynamicText = 'Pujando'
   else if (!currentTurn) dynamicText = 'Esperando…'
   else if (isMyTurn) dynamicText = 'Es tu turno :D'
   else dynamicText = `Turno de ${turnParticipant?.display_name ?? '—'}`
@@ -75,11 +77,12 @@ export function InEventScreen({
     : null
 
   const canNominate = isMyTurn && !isBidding
-  const canSearch = canNominate || dev
+  // Pausing also locks the nominator out of the search/nominate flow.
+  const canSearch = (canNominate || dev) && !isPaused
 
   const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
   const inCooldown = cooldownLeft > 0
-  const canBid = isBidding && !inCooldown && !busy && !!state?.current_auction_pokemon_id
+  const canBid = isBidding && !isPaused && !inCooldown && !busy && !!state?.current_auction_pokemon_id
 
   // Reset the textbox to the opening minimum when a new auction (pokemon) starts.
   const auctionPokemonId = state?.current_auction_pokemon_id ?? null
@@ -214,7 +217,7 @@ export function InEventScreen({
             <input
               type="number"
               min={minBid}
-              disabled={!isBidding}
+              disabled={!isBidding || isPaused}
               value={bidValue}
               onChange={(e) => setBidValue(Math.max(0, parseInt(e.target.value, 10) || 0))}
               className="w-full bg-transparent text-lg font-bold text-slate-100/60 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -236,7 +239,7 @@ export function InEventScreen({
             <button
               key={inc}
               type="button"
-              disabled={!isBidding}
+              disabled={!isBidding || isPaused}
               onClick={() => addToBid(inc)}
               className="h-20 flex-1 rounded-xl bg-[#171717] text-2xl font-semibold text-lime-200 shadow-[0px_0px_46px_0px_rgba(48,110,25,0.25)] outline outline-2 -outline-offset-2 outline-[#3f6212] [text-shadow:0px_0px_10px_rgba(188,227,146,0.25)] disabled:opacity-40"
             >

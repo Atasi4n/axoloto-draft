@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Undo2,
+  RotateCcw,
   SkipForward,
-  Gift,
   Gavel,
   Ban,
   ArrowRight,
   Play,
+  Pause,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuctionStore } from '@/features/auction/hooks/useAuctionStore'
@@ -19,16 +20,18 @@ import { HostTopBar } from './HostTopBar'
 import {
   skipTurnAction,
   advancePhaseAction,
-  editBudgetAction,
   resetToWaitingAction,
   resolveAuctionAction,
   startNominationTimerAction,
   nominateHostAction,
   undoLastBidAction,
+  undoLastRoundAction,
+  pauseAuctionAction,
+  resumeAuctionAction,
 } from '@/features/auction/actions/host.actions'
 import { formatMMSS } from '@/lib/utils'
 import { ConfirmModal } from './ConfirmModal'
-import { GiftPokemonModal } from './GiftPokemonModal'
+import { EditTeamModal } from './EditTeamModal'
 
 type ActionResult = { success: true } | { success: false; error: string }
 
@@ -55,11 +58,22 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
   const [types, setTypes] = useState<string[]>([])
   const [homeSprite, setHomeSprite] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
-  const [giftOpen, setGiftOpen] = useState(false)
   const [nominateOpen, setNominateOpen] = useState(false)
+  const [editParticipantId, setEditParticipantId] = useState<string | null>(null)
+  // Auto Skip is host-local (front-only): participants whose turn is auto-skipped.
+  const [autoSkipIds, setAutoSkipIds] = useState<Set<string>>(new Set())
   const resolvingRef = useRef(false)
   const settingTimerRef = useRef(false)
   const skippingRef = useRef(false)
+  const autoSkippingRef = useRef(false)
+
+  const toggleAutoSkip = (pid: string) =>
+    setAutoSkipIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(pid)) next.delete(pid)
+      else next.add(pid)
+      return next
+    })
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -102,26 +116,39 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
     participants.find((p) => p.id === pid)?.display_name ?? '—'
 
   const isBidding = state?.status === 'BIDDING'
+  const isPaused = !!state?.paused_at
   const currentTurn = turns.find((t) => t.id === state?.current_turn_id)
-  const dynamicText = isBidding
-    ? 'Pujando'
-    : currentTurn
-      ? `Turno de ${nameOf(currentTurn.participant_id)}`
-      : 'Esperando'
+  const dynamicText = isPaused
+    ? 'En pausa'
+    : isBidding
+      ? 'Pujando'
+      : currentTurn
+        ? `Turno de ${nameOf(currentTurn.participant_id)}`
+        : 'Esperando'
 
+  // While paused the countdown freezes: measure against paused_at, not the live clock.
   const remaining = state?.timer_ends_at
-    ? Math.max(0, Math.ceil((new Date(state.timer_ends_at).getTime() - now) / 1000))
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(state.timer_ends_at).getTime() -
+            (state.paused_at ? new Date(state.paused_at).getTime() : now)) /
+            1000,
+        ),
+      )
     : null
 
   const isNominationPhase = state?.phase === 'MEGA' || state?.phase === 'MAIN'
 
   // Start the 2-min nomination timer for a fresh turn (IDLE + no timer set).
+  // Skip starting it for Auto Skip participants — they're skipped immediately.
   useEffect(() => {
     if (
       isNominationPhase &&
       state?.status === 'IDLE' &&
       state?.current_turn_id &&
       !state?.timer_ends_at &&
+      !(currentTurn && autoSkipIds.has(currentTurn.participant_id)) &&
       !settingTimerRef.current
     ) {
       settingTimerRef.current = true
@@ -133,7 +160,29 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         settingTimerRef.current = false
       })
     }
-  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, eventId, setSnapshot])
+  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, currentTurn, autoSkipIds, eventId, setSnapshot])
+
+  // Auto Skip: as soon as it's a flagged participant's nomination turn, skip it
+  // immediately (no waiting for their timer). Cascades through consecutive ones.
+  useEffect(() => {
+    if (
+      isNominationPhase &&
+      !isPaused &&
+      state?.status === 'IDLE' &&
+      currentTurn &&
+      autoSkipIds.has(currentTurn.participant_id) &&
+      !autoSkippingRef.current
+    ) {
+      autoSkippingRef.current = true
+      skipTurnAction(eventId).then(async (r) => {
+        if (r.success) {
+          const snap = await getSnapshotAction(eventId)
+          if (snap.success) setSnapshot(snap.data)
+        }
+        autoSkippingRef.current = false
+      })
+    }
+  }, [isNominationPhase, isPaused, state?.status, currentTurn, autoSkipIds, eventId, setSnapshot])
 
   // Timer hit 0: during BIDDING → resolve (assign to highest bidder); during
   // a nomination turn → skip to the next turn. resolve/skip are idempotent-ish
@@ -141,7 +190,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
   useEffect(() => {
     if (remaining !== 0) return
 
-    if (isBidding && !resolvingRef.current) {
+    if (isBidding && !isPaused && !resolvingRef.current) {
       resolvingRef.current = true
       resolveAuctionAction(eventId).then(async (r) => {
         if (r.success) {
@@ -150,7 +199,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         }
         resolvingRef.current = false
       })
-    } else if (isNominationPhase && state?.status === 'IDLE' && state?.timer_ends_at && !skippingRef.current) {
+    } else if (isNominationPhase && !isPaused && state?.status === 'IDLE' && state?.timer_ends_at && !skippingRef.current) {
       skippingRef.current = true
       skipTurnAction(eventId).then(async (r) => {
         if (r.success) {
@@ -160,7 +209,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         skippingRef.current = false
       })
     }
-  }, [remaining, isBidding, isNominationPhase, state?.status, state?.timer_ends_at, eventId, setSnapshot])
+  }, [remaining, isBidding, isPaused, isNominationPhase, state?.status, state?.timer_ends_at, eventId, setSnapshot])
 
   // Pujas: the 5 highest bids (best bid per participant), amount desc,
   // alphabetical tiebreak. Top-3 get gold/silver/bronze.
@@ -181,14 +230,6 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
   const upcoming =
     curIdx >= 0 ? [1, 2, 3].map((k) => order[(curIdx + k) % order.length]).filter(Boolean) : []
 
-  function onEditBudget(pid: string, current: number) {
-    const input = window.prompt('Nuevo presupuesto:', String(current))
-    if (input == null) return
-    const amount = parseInt(input, 10)
-    if (Number.isNaN(amount)) return
-    run(() => editBudgetAction(eventId, pid, amount))
-  }
-
   const ctrl =
     'flex items-center gap-3 rounded-lg border px-4 py-3 text-left text-base transition-colors disabled:opacity-50'
   const ctrlNeutral = `${ctrl} border-white/10 bg-[#15151c] text-gray-200 hover:bg-[#1c1c24]`
@@ -205,8 +246,9 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
       <div className="grid grid-cols-[1.6fr_1fr] gap-5">
         {/* LEFT */}
         <div className="flex flex-col gap-5">
-          <div className={`${CARD} p-5`}>
-            <div className="flex items-start justify-between">
+          <div className={`${CARD} flex items-center justify-between gap-4 p-5`}>
+            {/* Subasta en curso — pokemon + tipos */}
+            <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <span className={SECTION}>Subasta en Curso</span>
                 {state?.phase && (
@@ -215,36 +257,64 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
                   </span>
                 )}
               </div>
-              <span className="text-sm text-gray-400">{dynamicText}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-[#15151c]">
+                  {currentPokemon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={homeSprite ?? currentPokemon.sprite_snapshot ?? ''}
+                      alt={currentPokemon.name_snapshot}
+                      className="h-16 w-16 object-contain"
+                    />
+                  ) : (
+                    <span className="text-gray-600">—</span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-2xl font-medium text-white">
+                    {currentPokemon?.name_snapshot ?? 'Sin subasta'}
+                  </div>
+                  <div className="mt-1.5 flex gap-1.5">
+                    {types.map((t) => (
+                      <TypeBadge key={t} type={t} />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="mt-3 flex items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-[#15151c]">
-                {currentPokemon ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={homeSprite ?? currentPokemon.sprite_snapshot ?? ''}
-                    alt={currentPokemon.name_snapshot}
-                    className="h-16 w-16 object-contain"
-                  />
-                ) : (
-                  <span className="text-gray-600">—</span>
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="text-2xl font-medium text-white">
-                  {currentPokemon?.name_snapshot ?? 'Sin subasta'}
-                </div>
-                <div className="mt-1.5 flex gap-1.5">
-                  {types.map((t) => (
-                    <TypeBadge key={t} type={t} />
-                  ))}
-                </div>
-              </div>
+
+            {/* Pausar / Reanudar subasta */}
+            <div className="flex flex-col items-center gap-4">
+              <span className="text-sm font-medium text-white">
+                {isPaused ? 'Reanudar Subasta' : 'Pausar Subasta'}
+              </span>
+              <button
+                type="button"
+                disabled={busy || (!state?.timer_ends_at && !isPaused)}
+                onClick={() =>
+                  run(() => (isPaused ? resumeAuctionAction(eventId) : pauseAuctionAction(eventId)))
+                }
+                aria-label={isPaused ? 'Reanudar subasta' : 'Pausar subasta'}
+                className={
+                  isPaused
+                    ? 'flex h-12 w-12 items-center justify-center rounded-[10px] border-2 border-red-900/60 bg-red-950/30 text-red-300 transition-colors hover:bg-red-950/50 disabled:cursor-default disabled:opacity-40'
+                    : 'flex h-12 w-12 items-center justify-center rounded-[10px] border-2 border-[#4d7c0f] bg-[#0d0d12] text-[#bef264] shadow-[0px_0px_16px_0px_rgba(48,110,25,0.25)] transition-colors hover:bg-[#15151c] disabled:cursor-default disabled:opacity-40'
+                }
+              >
+                {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+              </button>
+            </div>
+
+            {/* Texto dinámico + timer */}
+            <div className="flex flex-col items-end gap-4">
+              <span className="text-sm text-gray-400">{dynamicText}</span>
               <div className="text-right">
                 <div className="font-mono text-4xl font-medium text-white">
                   {remaining != null ? formatMMSS(remaining) : '—'}
                 </div>
-                <div className="text-xs text-gray-500">restante</div>
+                <div className={`text-xs ${isPaused ? 'text-amber-400' : 'text-gray-500'}`}>
+                  {isPaused ? 'pausado' : 'restante'}
+                </div>
               </div>
             </div>
           </div>
@@ -299,18 +369,19 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
             </button>
             <button
               type="button"
-              onClick={() => setGiftOpen(true)}
-              className={`${ctrlNeutral} cursor-pointer`}
-            >
-              <Gift className="h-5 w-5" /> Regalar Pokemon
-            </button>
-            <button
-              type="button"
               disabled={busy || isBidding || !currentTurn}
               onClick={() => setNominateOpen(true)}
               className={`${ctrlNeutral} cursor-pointer disabled:cursor-default disabled:opacity-40`}
             >
               <Gavel className="h-5 w-5" /> Nominar
+            </button>
+            <button
+              type="button"
+              disabled={busy || isBidding}
+              onClick={() => run(() => undoLastRoundAction(eventId))}
+              className={`${ctrl} cursor-pointer border-lime-800 bg-[#1a1c14] text-lime-300 hover:bg-[#22251a] disabled:cursor-default disabled:opacity-40`}
+            >
+              <RotateCcw className="h-5 w-5" /> Deshacer ronda
             </button>
             <button
               type="button"
@@ -362,16 +433,16 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         </div>
       </div>
 
-      {/* Presupuestos */}
+      {/* Panel de control — click a participant to manage their team. */}
       <div className={`${CARD} mt-5 p-5`}>
-        <span className={SECTION}>Presupuestos</span>
+        <span className={SECTION}>Panel de control</span>
         <div className="mt-3 grid grid-cols-4 gap-3">
           {participants.map((p) => (
             <button
               key={p.id}
               type="button"
               disabled={busy}
-              onClick={() => onEditBudget(p.id, p.budget)}
+              onClick={() => setEditParticipantId(p.id)}
               className="flex items-center justify-between rounded-lg border border-white/10 bg-[#15151c] px-4 py-3 text-left hover:bg-[#1c1c24]"
             >
               <span className="text-sm text-gray-300">{p.display_name}</span>
@@ -392,11 +463,15 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         onCancel={() => setConfirmReset(false)}
       />
 
-      <GiftPokemonModal
-        eventId={eventId}
-        open={giftOpen}
-        onClose={() => setGiftOpen(false)}
-      />
+      {editParticipantId && (
+        <EditTeamModal
+          eventId={eventId}
+          participantId={editParticipantId}
+          autoSkip={autoSkipIds.has(editParticipantId)}
+          onToggleAutoSkip={() => toggleAutoSkip(editParticipantId)}
+          onClose={() => setEditParticipantId(null)}
+        />
+      )}
 
       {/* Host nominates the pokemon for the current turn's participant. */}
       <SearchModal

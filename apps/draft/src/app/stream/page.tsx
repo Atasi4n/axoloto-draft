@@ -43,15 +43,20 @@ const PHASE_UI: Partial<
 const BALLS = ['/GoldBall.png', '/SilverBall.png', '/BronzeBallpng.png']
 
 const GLOW = {
-  textShadow: '0 0 12px rgba(255,255,255,1)',
+  textShadow: '0 0 12px rgba(255,255,255,0.5)',
 }
 
 const BIG_GLOW = {
-  textShadow: '0 0 16px rgba(255,255,255,1)',
+  textShadow: '0 0 16px rgba(255,255,255,0.5)',
 }
 
 const TIMER_GLOW = {
-  textShadow: '0 0 16px rgba(255,255,255,0.35)',
+  textShadow: '0 0 16px rgba(255,255,255,0.2)',
+}
+
+// The phase display keeps its full-strength glow (everything else is dialled down).
+const PHASE_GLOW = {
+  textShadow: '0 0 12px rgba(255,255,255,1)',
 }
 
 const TYPE_UI: Record<string, { label: string; bg: string; color: string; glow: string }> = {
@@ -510,7 +515,7 @@ const remaining = data?.timerEndsAt
             width: 360,
           }}
         >
-          <span className="text-4xl font-medium text-white" style={GLOW}>
+          <span className="text-4xl font-medium text-white" style={PHASE_GLOW}>
             Fase:
           </span>
 
@@ -520,7 +525,7 @@ const remaining = data?.timerEndsAt
               style={
                 phaseUi?.rainbow
                   ? {
-                      ...GLOW,
+                      ...PHASE_GLOW,
                       background:
                         'linear-gradient(90deg,#ff8ad8,#fff7a8,#a8ffce,#9fd4ff,#d6b4ff)',
                       WebkitBackgroundClip: 'text',
@@ -529,7 +534,7 @@ const remaining = data?.timerEndsAt
                       height: '119px',
                     }
                   : {
-                      ...GLOW,
+                      ...PHASE_GLOW,
                       color: 'white',
                     }
               }

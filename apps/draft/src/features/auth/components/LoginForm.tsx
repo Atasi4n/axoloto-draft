@@ -61,7 +61,7 @@ export function LoginForm() {
       />
 
       <div className="flex w-full max-w-6xl flex-col gap-8">
-        <h1 className="text-center text-3xl font-medium text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)] md:text-left md:text-6xl md:[text-shadow:0px_0px_23px_rgba(255,255,255,1)]">
+        <h1 className="text-center text-3xl font-medium text-white [text-shadow:0px_0px_10px_rgba(255,255,255,0.5)] md:text-left md:text-6xl md:[text-shadow:0px_0px_23px_rgba(255,255,255,0.5)]">
           Bienvenido :)
         </h1>
 
@@ -72,7 +72,7 @@ export function LoginForm() {
             width={736}
             height={564}
             priority
-            className="h-auto w-72 drop-shadow-[0px_0px_10px_rgba(255,255,255,0.25)] md:w-[34rem]"
+            className="h-auto w-72 drop-shadow-[0px_0px_10px_rgba(255,255,255,0.15)] md:w-[34rem]"
           />
 
           <form

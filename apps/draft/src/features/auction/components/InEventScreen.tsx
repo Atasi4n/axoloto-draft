@@ -135,7 +135,7 @@ export function InEventScreen({
 
   return (
     <main className="flex flex-1 flex-col items-center gap-4 overflow-y-auto bg-[#09090b] px-4 pb-5 pt-16">
-      <h1 className="text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)]">
+      <h1 className="text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,0.5)]">
         Tu equipo
       </h1>
 
@@ -177,18 +177,18 @@ export function InEventScreen({
 
       {/* Center — dynamic text + best bid + budget */}
       <div className="flex flex-col items-center gap-4 pt-2">
-        <p className="text-center text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)]">
+        <p className="text-center text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,0.5)]">
           {dynamicText}
         </p>
 
-        <p className="text-center text-xl font-bold text-white [text-shadow:0px_0px_5px_rgba(255,255,255,1)]">
+        <p className="text-center text-xl font-bold text-white [text-shadow:0px_0px_5px_rgba(255,255,255,0.5)]">
           Puja mas grande:
           <br />
           {topBid ? `${topBid.amount}$ · ${topBidder?.display_name ?? '—'}` : '—'}
         </p>
 
         <div className="flex h-11 items-center gap-1.5 rounded-[10px] bg-[#09090b] px-3 outline outline-2 -outline-offset-2 outline-[#374151]">
-          <span className="text-xl font-medium text-white [text-shadow:0px_0px_5px_rgba(255,255,255,1)]">
+          <span className="text-xl font-medium text-white [text-shadow:0px_0px_5px_rgba(255,255,255,0.5)]">
             {budget}
           </span>
           <span className="text-xl font-bold text-white">₽</span>
@@ -244,7 +244,7 @@ export function InEventScreen({
               type="button"
               disabled={!isBidding || isPaused}
               onClick={() => addToBid(inc)}
-              className="h-20 flex-1 rounded-xl bg-[#171717] text-2xl font-semibold text-lime-200 shadow-[0px_0px_46px_0px_rgba(48,110,25,0.25)] outline outline-2 -outline-offset-2 outline-[#3f6212] [text-shadow:0px_0px_10px_rgba(188,227,146,0.25)] disabled:opacity-40"
+              className="h-20 flex-1 rounded-xl bg-[#171717] text-2xl font-semibold text-lime-200 shadow-[0px_0px_46px_0px_rgba(48,110,25,0.25)] outline outline-2 -outline-offset-2 outline-[#3f6212] [text-shadow:0px_0px_10px_rgba(188,227,146,0.15)] disabled:opacity-40"
             >
               +{inc}
             </button>

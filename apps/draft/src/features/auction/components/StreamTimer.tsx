@@ -68,7 +68,7 @@ export function StreamTimer({
         style={{
           ...textStyle,
           color: numberColor,
-          textShadow: `0 0 16px ${numberColor}`,
+          textShadow: `0 0 10px ${numberColor}`,
           transition: 'color 0.25s, text-shadow 0.25s',
         }}
       >

@@ -8,18 +8,46 @@ import { WaitingRoom, type WaitingVariant } from './WaitingRoom'
 import { InEventScreen } from './InEventScreen'
 import { CoachInEventScreen } from './CoachInEventScreen'
 import { LogoutButton } from '@/features/auth/components/LogoutButton'
+import { User } from 'lucide-react'
 import type { UserRole } from '@/types/auction.types'
 
 type Props = {
   eventId:           string
   userId:            string
   role:              UserRole
+  displayName:       string | null
   counterpartUserId: string | null
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+const ROLE_LABEL: Record<UserRole, string> = {
+  HOST:        'Host',
+  PARTICIPANT: 'Invalido',
+  COACH:       'Coach',
+}
+
+// Top-left "who am I" tag so participants/coaches always see whose screen this is.
+function WhoAmI({ name, role }: { name: string | null; role: UserRole }) {
+  return (
+    <div className="absolute left-3 top-3 z-10 flex max-w-[55vw] items-center gap-2 rounded-full border border-white/10 bg-[#15151c] px-3 py-1.5">
+      <User className="h-4 w-4 shrink-0 text-gray-400" />
+      <span className="truncate text-sm font-medium text-white">{name ?? '—'}</span>
+      <span className="shrink-0 text-xs text-gray-500">· {ROLE_LABEL[role]}</span>
+    </div>
+  )
+}
+
+function Shell({
+  children,
+  displayName,
+  role,
+}: {
+  children: React.ReactNode
+  displayName: string | null
+  role: UserRole
+}) {
   return (
     <div className="relative flex flex-1 flex-col">
+      <WhoAmI name={displayName} role={role} />
       {children}
       <div className="absolute right-3 top-3 z-10">
         <LogoutButton />
@@ -28,12 +56,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function MobileApp({ eventId, userId, role, counterpartUserId }: Props) {
+export function MobileApp({ eventId, userId, role, displayName, counterpartUserId }: Props) {
   const { error } = useAuctionRealtime(eventId)
   const online = usePresence(eventId, userId)
   const phase = useAuctionStore((s) => s.state?.phase ?? null)
 
-  // DEV: /mobile?dev=event renders the in-event screen without starting the event.
+  // DEV: /auction?dev=event renders the in-event screen without starting the event.
   const devEvent = useSearchParams().get('dev') === 'event'
 
   if (phase === null && !devEvent) {
@@ -53,13 +81,13 @@ export function MobileApp({ eventId, userId, role, counterpartUserId }: Props) {
   if (devEvent || inEventPhase) {
     if (role === 'COACH') {
       return (
-        <Shell>
+        <Shell displayName={displayName} role={role}>
           <CoachInEventScreen counterpartUserId={counterpartUserId} eventId={eventId} />
         </Shell>
       )
     }
     return (
-      <Shell>
+      <Shell displayName={displayName} role={role}>
         <InEventScreen userId={userId} eventId={eventId} dev={devEvent} />
       </Shell>
     )
@@ -76,7 +104,7 @@ export function MobileApp({ eventId, userId, role, counterpartUserId }: Props) {
         : 'coach-missing'
 
     return (
-      <Shell>
+      <Shell displayName={displayName} role={role}>
         <WaitingRoom variant={variant} />
       </Shell>
     )
@@ -84,7 +112,7 @@ export function MobileApp({ eventId, userId, role, counterpartUserId }: Props) {
 
   // ENDED
   return (
-    <Shell>
+    <Shell displayName={displayName} role={role}>
       <main className="flex flex-1 items-center justify-center bg-[#09090b]">
         <p className="text-sm text-gray-400">evento finalizado · pendiente</p>
       </main>

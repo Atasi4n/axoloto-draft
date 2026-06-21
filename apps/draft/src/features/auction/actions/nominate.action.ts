@@ -56,6 +56,17 @@ async function openAuction(
     return { success: false, error: 'Failed to create auction.' }
   }
 
+  // Auto opening bid: the nominee (the participant whose turn it is) is placed
+  // as the standing bidder at MIN_BID, so if nobody outbids they keep it.
+  if (nominatedByParticipantId) {
+    await supabase.from('bids').insert({
+      event_id:           eventId,
+      auction_pokemon_id: auctionPokemon.id,
+      participant_id:     nominatedByParticipantId,
+      amount:             AUCTION_CONFIG.MIN_BID,
+    })
+  }
+
   // Open bidding, timer begins
   const timerEndsAt = new Date(
     Date.now() + AUCTION_CONFIG.TIMER_SECONDS * 1000
@@ -96,6 +107,17 @@ export async function nominateAction({
 
   if (!userRow || (userRow.role !== 'PARTICIPANT' && userRow.role !== 'COACH')) {
     return { success: false, error: 'Only participants and coaches can nominate.' }
+  }
+
+  // Reject nominations/objections while the host has the auction paused.
+  const { data: pauseState } = await supabase
+    .from('auction_state')
+    .select('paused_at')
+    .eq('event_id', eventId)
+    .single()
+
+  if (pauseState?.paused_at) {
+    return { success: false, error: 'La subasta está pausada.' }
   }
 
   // PARTICIPANT path

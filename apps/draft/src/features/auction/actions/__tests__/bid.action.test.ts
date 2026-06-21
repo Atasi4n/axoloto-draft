@@ -21,6 +21,7 @@ function buildAuthClient(role = 'PARTICIPANT') {
   supabase.from
     .mockReturnValueOnce(q({ data: { role } }))            // users.role
     .mockReturnValueOnce(q({ data: { id: PARTICIPANT_ID } }))  // participants row
+    .mockReturnValueOnce(q({ data: { paused_at: null } }))     // auction_state pause check
   return supabase
 }
 

@@ -320,22 +320,21 @@ export async function assignPokemonAction(
       .eq('id', participantId)
   }
 
-  // Reset auction_state, then advance to the next turn
-  await auth.supabase
-    .from('auction_state')
-    .update({
-      status:                     'IDLE',
-      current_auction_pokemon_id: null,
-      timer_ends_at:              null,
-    })
-    .eq('event_id', eventId)
-
-  const turnResult = await advanceTurn(eventId)
-  if (!turnResult.success) {
-    return { success: false, error: turnResult.error }
+  // Gifting must NOT consume the current turn. Only reset auction_state if we
+  // cancelled an active bidding above (back to IDLE on the SAME turn); a gift
+  // during a quiet nomination turn leaves the turn and its timer untouched.
+  if (state?.status === 'BIDDING' && state.current_auction_pokemon_id) {
+    await auth.supabase
+      .from('auction_state')
+      .update({
+        status:                     'IDLE',
+        current_auction_pokemon_id: null,
+        timer_ends_at:              null,
+      })
+      .eq('event_id', eventId)
   }
 
-  // Check if mega phase is now complete
+  // Gifting a mega-capable pokemon can complete the MEGA phase.
   await checkMegaPhase(eventId)
 
   return { success: true }
@@ -517,7 +516,12 @@ export async function pauseAuctionAction(eventId: string): Promise<ActionResult>
     .single()
 
   if (stateError || !state) return { success: false, error: 'Auction state not found.' }
-  if (state.status !== 'BIDDING') return { success: false, error: 'No active auction to pause.' }
+  // Pause works during bidding AND during a nomination turn (IDLE + running
+  // nomination timer). Either way there must be a live timer to freeze.
+  if (state.status !== 'BIDDING' && state.status !== 'IDLE') {
+    return { success: false, error: 'No active auction to pause.' }
+  }
+  if (!state.timer_ends_at) return { success: false, error: 'No hay temporizador activo para pausar.' }
   if (state.paused_at) return { success: false, error: 'Auction is already paused.' }
 
   const { error } = await auth.supabase
@@ -794,6 +798,17 @@ export async function nominateHostAction(
     .single()
 
   if (insertError || !auctionPokemon) return { success: false, error: 'Failed to create auction.' }
+
+  // Auto opening bid: place the turn's participant as the standing bidder at
+  // MIN_BID so a host nomination with no further bids is won by them (not cancelled).
+  if (participantId) {
+    await adminClient.from('bids').insert({
+      event_id:           eventId,
+      auction_pokemon_id: auctionPokemon.id,
+      participant_id:     participantId,
+      amount:             AUCTION_CONFIG.MIN_BID,
+    })
+  }
 
   const timerEndsAt = new Date(
     Date.now() + AUCTION_CONFIG.TIMER_SECONDS * 1000

@@ -19,6 +19,9 @@ const DESIGN_HEIGHT = 1080
 
 const SLOTS = [0, 1, 2, 3, 4, 5]
 
+// How long each form (mega / regional / alternate) is shown before cycling.
+const FORM_INTERVAL_MS = 7000
+
 const EMPTY_STATS: StreamStat[] = [
   { label: 'HP', value: 0 },
   { label: 'Ataque', value: 0 },
@@ -40,15 +43,20 @@ const PHASE_UI: Partial<
 const BALLS = ['/GoldBall.png', '/SilverBall.png', '/BronzeBallpng.png']
 
 const GLOW = {
-  textShadow: '0 0 12px rgba(255,255,255,1)',
+  textShadow: '0 0 12px rgba(255,255,255,0.5)',
 }
 
 const BIG_GLOW = {
-  textShadow: '0 0 16px rgba(255,255,255,1)',
+  textShadow: '0 0 16px rgba(255,255,255,0.5)',
 }
 
 const TIMER_GLOW = {
-  textShadow: '0 0 16px rgba(255,255,255,0.35)',
+  textShadow: '0 0 16px rgba(255,255,255,0.2)',
+}
+
+// The phase display keeps its full-strength glow (everything else is dialled down).
+const PHASE_GLOW = {
+  textShadow: '0 0 12px rgba(255,255,255,1)',
 }
 
 const TYPE_UI: Record<string, { label: string; bg: string; color: string; glow: string }> = {
@@ -198,6 +206,7 @@ function StreamStatLine({ stat }: { stat: StreamStat }) {
               width: `${pct}%`,
               background: color,
               boxShadow: `0 0 10px ${color}`,
+              transition: 'width 0.5s ease, background 0.5s ease, box-shadow 0.5s ease',
             }}
           />
         </div>
@@ -275,6 +284,9 @@ function BidCard({
 export default function StreamPage() {
   const [data, setData] = useState<StreamData | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [formIndex, setFormIndex] = useState(0)   // cycling target
+  const [shownIndex, setShownIndex] = useState(0) // form currently rendered
+  const [flipping, setFlipping] = useState(false) // mid-flip (sprite edge-on)
   const stage = useStageScale()
 
   useEffect(() => {
@@ -300,19 +312,63 @@ export default function StreamPage() {
     return () => clearInterval(id)
   }, [])
 
+  // Reset to the base form whenever a new pokemon comes up for auction.
+  const pokemonName = data?.pokemon?.name ?? null
+  useEffect(() => {
+    setFormIndex(0)
+    setShownIndex(0)
+    setFlipping(false)
+  }, [pokemonName])
+
+  // Cycle mega / regional / alternate forms while there is more than one.
+  const formCount = data?.pokemon?.forms?.length ?? 0
+  useEffect(() => {
+    if (formCount <= 1) return
+    const id = setInterval(
+      () => setFormIndex((i) => (i + 1) % formCount),
+      FORM_INTERVAL_MS,
+    )
+    return () => clearInterval(id)
+  }, [formCount, pokemonName])
+
+  // Form-change flip: close (scaleX→0), swap the sprite at the edge, then open.
+  useEffect(() => {
+    if (formIndex === shownIndex) return
+    setFlipping(true)
+    const t = setTimeout(() => {
+      setShownIndex(formIndex)
+      setFlipping(false)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [formIndex, shownIndex])
+
 const timerMax =
   data?.status === 'BIDDING'
     ? AUCTION_CONFIG.TIMER_SECONDS
     : AUCTION_CONFIG.NOMINATION_SECONDS
 
 // When no timer is running (waiting / idle) show the full bar at its max.
+// While paused the countdown freezes: measure against pausedAt, not the live clock.
 const remaining = data?.timerEndsAt
-  ? Math.max(0, (new Date(data.timerEndsAt).getTime() - now) / 1000)
+  ? Math.max(
+      0,
+      (new Date(data.timerEndsAt).getTime() -
+        (data.pausedAt ? new Date(data.pausedAt).getTime() : now)) /
+        1000,
+    )
   : timerMax
 
   const participants = (data?.participants ?? []).slice(0, 8)
   const pokemon = data?.pokemon ?? null
-  const stats = pokemon?.stats ?? EMPTY_STATS
+
+  // Currently-shown form (base / mega / regional / alt) drives image, types, stats.
+  const forms = pokemon?.forms ?? []
+  const cycling = forms.length > 1
+  const form = forms[shownIndex] ?? forms[0] ?? null
+  const displaySprite = form?.spriteHome ?? pokemon?.spriteHome ?? null
+  const displayTypes = form?.types ?? pokemon?.types ?? []
+  const stats = form?.stats ?? pokemon?.stats ?? EMPTY_STATS
+  const displayTotal = form?.total ?? pokemon?.total ?? 0
 
   const topBids = data?.topBids ?? [null, null, null]
   const bidSlots = [topBids[0] ?? null, topBids[1] ?? null, topBids[2] ?? null] as const
@@ -370,17 +426,35 @@ const remaining = data?.timerEndsAt
         >
           <div className="flex h-full flex-1 flex-col items-center justify-between">
             <div className="flex w-full flex-col items-center gap-2">
-              {pokemon?.spriteHome ? (
+              {displaySprite ? (
                 <img
-                  src={pokemon.spriteHome}
-                  alt={pokemon.name}
+                  src={displaySprite}
+                  alt={pokemon?.name ?? ''}
                   className="h-96 w-[416px] object-contain"
+                  style={{
+                    transform: flipping ? 'scaleX(0)' : 'scaleX(1)',
+                    transition: 'transform 0.3s ease',
+                  }}
                 />
               ) : (
                 <div className="flex h-96 w-[416px] items-center justify-center text-2xl text-[#475569]">
                   Sin subasta
                 </div>
               )}
+
+              {/* Depleting countdown bar (above the name) — seconds until the next form. */}
+              <div className="h-2 w-[416px]">
+                {cycling && (
+                  <div
+                    key={`bar-${pokemon?.name}-${formIndex}`}
+                    className="h-full rounded-full"
+                    style={{
+                      background: '#484268',
+                      animation: `formCountdown ${FORM_INTERVAL_MS}ms linear forwards`,
+                    }}
+                  />
+                )}
+              </div>
 
               <span
                 className="w-full truncate text-center text-5xl font-bold text-white"
@@ -391,7 +465,7 @@ const remaining = data?.timerEndsAt
             </div>
 
             <div className="flex items-center justify-center gap-4">
-              {(pokemon?.types ?? []).map((type) => (
+              {displayTypes.map((type) => (
                 <TypePill key={type} type={type} />
               ))}
             </div>
@@ -406,7 +480,7 @@ const remaining = data?.timerEndsAt
 
             <div className="rounded-lg bg-[#475569] p-2.5">
               <span className="text-3xl font-medium text-white" style={GLOW}>
-                Total: {pokemon?.total ?? 0}
+                Total: {displayTotal}
               </span>
             </div>
           </div>
@@ -441,7 +515,7 @@ const remaining = data?.timerEndsAt
             width: 360,
           }}
         >
-          <span className="text-4xl font-medium text-white" style={GLOW}>
+          <span className="text-4xl font-medium text-white" style={PHASE_GLOW}>
             Fase:
           </span>
 
@@ -451,7 +525,7 @@ const remaining = data?.timerEndsAt
               style={
                 phaseUi?.rainbow
                   ? {
-                      ...GLOW,
+                      ...PHASE_GLOW,
                       background:
                         'linear-gradient(90deg,#ff8ad8,#fff7a8,#a8ffce,#9fd4ff,#d6b4ff)',
                       WebkitBackgroundClip: 'text',
@@ -460,7 +534,7 @@ const remaining = data?.timerEndsAt
                       height: '119px',
                     }
                   : {
-                      ...GLOW,
+                      ...PHASE_GLOW,
                       color: 'white',
                     }
               }
@@ -491,6 +565,7 @@ const remaining = data?.timerEndsAt
             remaining={remaining}
             max={timerMax}
             textStyle={TIMER_GLOW}
+            waiting={data?.phase === 'WAITING'}
           />
         </section>
       </div>

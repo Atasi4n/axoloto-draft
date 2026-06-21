@@ -4,10 +4,41 @@ import { adminClient } from '@/lib/supabase/admin'
 import type { AuctionPhase, AuctionStatus } from '@/types/auction.types'
 
 export type StreamStat = { label: string; value: number }
+
+// One displayable variant of a pokemon (base, mega, regional, alternate form).
+export type FormVariant = {
+  label: string | null
+  isMega: boolean
+  spriteHome: string | null
+  types: string[]
+  stats: StreamStat[]
+  total: number
+}
+
+type StatRow = {
+  hp: number | null
+  attack: number | null
+  defense: number | null
+  special_attack: number | null
+  special_defense: number | null
+  speed: number | null
+}
+
+function buildStats(s: StatRow | null | undefined): StreamStat[] {
+  return [
+    { label: 'HP', value: s?.hp ?? 0 },
+    { label: 'Ataque', value: s?.attack ?? 0 },
+    { label: 'Defensa', value: s?.defense ?? 0 },
+    { label: 'Ataque Especial', value: s?.special_attack ?? 0 },
+    { label: 'Defensa Especial', value: s?.special_defense ?? 0 },
+    { label: 'Velocidad', value: s?.speed ?? 0 },
+  ]
+}
 export type StreamData = {
   phase: AuctionPhase | null
   status: AuctionStatus | null
   timerEndsAt: string | null
+  pausedAt: string | null
   participants: {
     id: string
     name: string
@@ -19,6 +50,8 @@ export type StreamData = {
     types: string[]
     stats: StreamStat[]
     total: number
+    // All displayable forms (base first); the stream cycles through them.
+    forms: FormVariant[]
   } | null
   topBids: ({ name: string; amount: number } | null)[]
 }
@@ -72,27 +105,52 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
     ])
 
     if (apR.data) {
-      const { data: meta } = await adminClient
-        .from('pokemon_meta')
-        .select('sprite_home, types, hp, attack, defense, special_attack, special_defense, speed')
-        .eq('species_id', apR.data.species_id)
-        .single()
+      const speciesId = apR.data.species_id
+      const [metaR, formsR] = await Promise.all([
+        adminClient
+          .from('pokemon_meta')
+          .select('sprite_home, types, hp, attack, defense, special_attack, special_defense, speed')
+          .eq('species_id', speciesId)
+          .single(),
+        adminClient
+          .from('pokemon_forms')
+          .select('is_default, is_mega, form_label, sprite_home, types, hp, attack, defense, special_attack, special_defense, speed')
+          .eq('species_id', speciesId)
+          .order('is_default', { ascending: false }) // default form first
+          .order('form_id', { ascending: true }),
+      ])
 
-      const s = meta
-      const stats: StreamStat[] = [
-        { label: 'HP', value: s?.hp ?? 0 },
-        { label: 'Ataque', value: s?.attack ?? 0 },
-        { label: 'Defensa', value: s?.defense ?? 0 },
-        { label: 'Ataque Especial', value: s?.special_attack ?? 0 },
-        { label: 'Defensa Especial', value: s?.special_defense ?? 0 },
-        { label: 'Velocidad', value: s?.speed ?? 0 },
-      ]
+      const formRows = formsR.data ?? []
+      const forms: FormVariant[] = formRows.map((f) => {
+        const stats = buildStats(f)
+        return {
+          label: f.form_label,
+          isMega: f.is_mega,
+          spriteHome: f.sprite_home,
+          types: (f.types as string[] | null) ?? [],
+          stats,
+          total: stats.reduce((sum, st) => sum + st.value, 0),
+        }
+      })
+
+      // Base display = default form if present, else pokemon_meta.
+      const baseStats = buildStats(metaR.data)
+      const base: FormVariant = forms[0] ?? {
+        label: null,
+        isMega: false,
+        spriteHome: metaR.data?.sprite_home ?? null,
+        types: (metaR.data?.types as string[] | null) ?? [],
+        stats: baseStats,
+        total: baseStats.reduce((sum, st) => sum + st.value, 0),
+      }
+
       pokemon = {
         name: apR.data.name_snapshot,
-        spriteHome: s?.sprite_home ?? null,
-        types: (s?.types as string[] | null) ?? [],
-        stats,
-        total: stats.reduce((sum, st) => sum + st.value, 0),
+        spriteHome: base.spriteHome,
+        types: base.types,
+        stats: base.stats,
+        total: base.total,
+        forms: forms.length ? forms : [base],
       }
     }
 
@@ -113,6 +171,7 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
     phase: (state?.phase as AuctionPhase | null) ?? null,
     status: (state?.status as AuctionStatus | null) ?? null,
     timerEndsAt: state?.timer_ends_at ?? null,
+    pausedAt: state?.paused_at ?? null,
     participants,
     pokemon,
     topBids,

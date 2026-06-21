@@ -118,16 +118,16 @@ describe('proxy', () => {
       )
     })
 
-    it('redirects /login to /mobile', async () => {
-      expect(locationOf(await proxy(req('/login')))).toContain('/mobile')
+    it('redirects /login to /auction', async () => {
+      expect(locationOf(await proxy(req('/login')))).toContain('/auction')
     })
 
-    it('allows /mobile through', async () => {
-      expect(locationOf(await proxy(req('/mobile')))).toBeNull()
+    it('allows /auction through', async () => {
+      expect(locationOf(await proxy(req('/auction')))).toBeNull()
     })
 
-    it('redirects the dropped /auction route to /login', async () => {
-      expect(locationOf(await proxy(req('/auction')))).toContain('/login')
+    it('redirects the dropped /mobile route to /login', async () => {
+      expect(locationOf(await proxy(req('/mobile')))).toContain('/login')
     })
 
     it('redirects /host to /login', async () => {
@@ -146,16 +146,16 @@ describe('proxy', () => {
       )
     })
 
-    it('redirects /login to /mobile', async () => {
-      expect(locationOf(await proxy(req('/login')))).toContain('/mobile')
+    it('redirects /login to /auction', async () => {
+      expect(locationOf(await proxy(req('/login')))).toContain('/auction')
     })
 
-    it('allows /mobile through', async () => {
-      expect(locationOf(await proxy(req('/mobile')))).toBeNull()
+    it('allows /auction through', async () => {
+      expect(locationOf(await proxy(req('/auction')))).toBeNull()
     })
 
-    it('redirects the dropped /auction route to /login', async () => {
-      expect(locationOf(await proxy(req('/auction')))).toContain('/login')
+    it('redirects the dropped /mobile route to /login', async () => {
+      expect(locationOf(await proxy(req('/mobile')))).toContain('/login')
     })
 
     it('redirects /host to /login', async () => {

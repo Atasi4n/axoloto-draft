@@ -7,6 +7,8 @@ export type ViewerContext = {
   eventId:           string
   userId:            string
   role:              UserRole
+  // The viewer's own display name (participant or coach), for the "who am I" tag.
+  displayName:       string | null
   // The paired counterpart's user_id: the coach (if viewer is a participant)
   // or the managed participant (if viewer is a coach). Null if unpaired.
   counterpartUserId: string | null
@@ -34,16 +36,18 @@ export async function getViewerContextAction(): Promise<Result> {
 
   let eventId: string | null = null
   let counterpartUserId: string | null = null
+  let displayName: string | null = null
 
   if (role === 'PARTICIPANT') {
     const { data: participant } = await supabase
       .from('participants')
-      .select('id, event_id')
+      .select('id, event_id, display_name')
       .eq('user_id', user.id)
       .maybeSingle()
 
     if (participant) {
       eventId = participant.event_id
+      displayName = participant.display_name
       const { data: cp } = await supabase
         .from('coach_participants')
         .select('coach_id')
@@ -62,12 +66,13 @@ export async function getViewerContextAction(): Promise<Result> {
   } else if (role === 'COACH') {
     const { data: coach } = await supabase
       .from('coaches')
-      .select('id, event_id')
+      .select('id, event_id, display_name')
       .eq('user_id', user.id)
       .maybeSingle()
 
     if (coach) {
       eventId = coach.event_id
+      displayName = coach.display_name
       const { data: cp } = await supabase
         .from('coach_participants')
         .select('participant_id')
@@ -100,6 +105,6 @@ export async function getViewerContextAction(): Promise<Result> {
 
   return {
     success: true,
-    data: { eventId, userId: user.id, role, counterpartUserId },
+    data: { eventId, userId: user.id, role, displayName, counterpartUserId },
   }
 }

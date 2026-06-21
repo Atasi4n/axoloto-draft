@@ -23,7 +23,7 @@ const MESSAGES: Record<WaitingVariant, string> = {
 
 export function WaitingRoom({ variant }: { variant: WaitingVariant }) {
   return (
-    <main className="relative flex flex-1 flex-col items-center justify-center gap-20 overflow-hidden bg-[#09090b] px-8">
+    <main className="relative flex flex-1 flex-col items-center justify-center gap-12 overflow-hidden bg-[#09090b] px-6 sm:gap-20">
       {/* Horizontal wavy lines — top scrolls right, bottom scrolls left */}
       <div
         aria-hidden
@@ -48,10 +48,10 @@ export function WaitingRoom({ variant }: { variant: WaitingVariant }) {
         width={736}
         height={564}
         priority
-        className="h-auto w-72 drop-shadow-[0px_0px_10px_rgba(255,255,255,0.25)]"
+        className="h-auto w-[min(70vw,18rem)] drop-shadow-[0px_0px_10px_rgba(255,255,255,0.15)]"
       />
 
-      <p className="max-w-xs text-center text-3xl font-medium text-[#f9fafb] [text-shadow:0px_0px_11px_rgba(255,255,255,0.25)]">
+      <p className="max-w-xs text-center text-2xl font-medium text-[#f9fafb] [text-shadow:0px_0px_11px_rgba(255,255,255,0.15)] sm:text-3xl">
         {MESSAGES[variant]}
       </p>
     </main>

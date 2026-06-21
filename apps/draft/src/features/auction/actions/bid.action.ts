@@ -47,6 +47,17 @@ export async function bidAction({
     return { success: false, error: 'Participant not found for this event.' }
   }
 
+  // Reject bids while the host has the auction paused.
+  const { data: pauseState } = await supabase
+    .from('auction_state')
+    .select('paused_at')
+    .eq('event_id', eventId)
+    .single()
+
+  if (pauseState?.paused_at) {
+    return { success: false, error: 'La subasta está pausada.' }
+  }
+
   // Delegate to engine
   const result = await placeBid({
     eventId,

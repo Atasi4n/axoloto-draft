@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { loginAction } from "@/features/auth/actions/auth.actions";
 
@@ -23,6 +24,7 @@ const inputClass =
 export function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +37,7 @@ export function LoginForm() {
 
     if (result.success) {
       // Session cookie is set server-side; a full navigation lets the proxy
-      // route us to the role-appropriate home (/mobile or /host).
+      // route us to the role-appropriate home (/auction or /host).
       window.location.assign("/");
       return;
     }
@@ -59,7 +61,7 @@ export function LoginForm() {
       />
 
       <div className="flex w-full max-w-6xl flex-col gap-8">
-        <h1 className="text-center text-3xl font-medium text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)] md:text-left md:text-6xl md:[text-shadow:0px_0px_23px_rgba(255,255,255,1)]">
+        <h1 className="text-center text-3xl font-medium text-white [text-shadow:0px_0px_10px_rgba(255,255,255,0.5)] md:text-left md:text-6xl md:[text-shadow:0px_0px_23px_rgba(255,255,255,0.5)]">
           Bienvenido :)
         </h1>
 
@@ -70,7 +72,7 @@ export function LoginForm() {
             width={736}
             height={564}
             priority
-            className="h-auto w-72 drop-shadow-[0px_0px_10px_rgba(255,255,255,0.25)] md:w-[34rem]"
+            className="h-auto w-72 drop-shadow-[0px_0px_10px_rgba(255,255,255,0.15)] md:w-[34rem]"
           />
 
           <form
@@ -104,17 +106,32 @@ export function LoginForm() {
                 >
                   Contraseña
                 </label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={loading}
-                  className={inputClass}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    disabled={loading}
+                    className={`${inputClass} pr-12 md:pr-14`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    disabled={loading}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-white disabled:opacity-50 md:right-5"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5 md:h-6 md:w-6" />
+                    ) : (
+                      <Eye className="h-5 w-5 md:h-6 md:w-6" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {error && (

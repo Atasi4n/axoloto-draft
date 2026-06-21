@@ -56,12 +56,14 @@ export function InEventScreen({
   const budget = me?.budget ?? 0
 
   const isBidding = state?.status === 'BIDDING'
+  const isPaused = !!state?.paused_at
   const currentTurn = turns.find((t) => t.id === state?.current_turn_id)
   const turnParticipant = participants.find((p) => p.id === currentTurn?.participant_id)
   const isMyTurn = !!turnParticipant && turnParticipant.user_id === userId
 
   let dynamicText: string
-  if (isBidding) dynamicText = 'Pujando'
+  if (isPaused) dynamicText = 'En pausa ⏸'
+  else if (isBidding) dynamicText = 'Pujando'
   else if (!currentTurn) dynamicText = 'Esperando…'
   else if (isMyTurn) dynamicText = 'Es tu turno :D'
   else dynamicText = `Turno de ${turnParticipant?.display_name ?? '—'}`
@@ -75,11 +77,12 @@ export function InEventScreen({
     : null
 
   const canNominate = isMyTurn && !isBidding
-  const canSearch = canNominate || dev
+  // Pausing also locks the nominator out of the search/nominate flow.
+  const canSearch = (canNominate || dev) && !isPaused
 
   const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
   const inCooldown = cooldownLeft > 0
-  const canBid = isBidding && !inCooldown && !busy && !!state?.current_auction_pokemon_id
+  const canBid = isBidding && !isPaused && !inCooldown && !busy && !!state?.current_auction_pokemon_id
 
   // Reset the textbox to the opening minimum when a new auction (pokemon) starts.
   const auctionPokemonId = state?.current_auction_pokemon_id ?? null
@@ -131,29 +134,29 @@ export function InEventScreen({
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center gap-7 overflow-y-auto bg-[#09090b] px-0 py-8">
-      <h1 className="text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)]">
+    <main className="flex flex-1 flex-col items-center gap-4 overflow-y-auto bg-[#09090b] px-4 pb-5 pt-16">
+      <h1 className="text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,0.5)]">
         Tu equipo
       </h1>
 
-      {/* Team grid — 6 slots */}
-      <div className="grid grid-cols-3 gap-5">
+      {/* Team grid — 6 fluid slots that scale with the phone width */}
+      <div className="grid w-full max-w-[20rem] grid-cols-3 gap-3">
         {SLOTS.map((i) => {
           const mon = team[i]
           return (
             <div
               key={i}
-              className="relative flex h-24 w-24 items-center justify-center rounded-lg bg-[#09090b] outline outline-2 -outline-offset-2 outline-[#374151]"
+              className="relative flex aspect-square items-center justify-center rounded-lg bg-[#09090b] outline outline-2 -outline-offset-2 outline-[#374151]"
             >
               {mon?.sprite_snapshot ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={mon.sprite_snapshot}
                   alt={mon.name_snapshot}
-                  className="h-25 w-25 object-contain"
+                  className="h-full w-full scale-110 object-contain"
                 />
               ) : (
-                <svg viewBox="0 0 100 100" aria-hidden className="h-20 w-20 text-[#101116]">
+                <svg viewBox="0 0 100 100" aria-hidden className="h-3/4 w-3/4 text-[#101116]">
                   <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="5" />
                   <line x1="12" y1="50" x2="88" y2="50" stroke="currentColor" strokeWidth="5" />
                   <circle cx="50" cy="50" r="13" fill="#09090b" stroke="currentColor" strokeWidth="5" />
@@ -164,7 +167,7 @@ export function InEventScreen({
                 <img
                   src="/mega.png"
                   alt="Mega"
-                  className="pointer-events-none absolute -left-2 -top-3 h-16 w-auto"
+                  className="pointer-events-none absolute -left-1 -top-2 h-[55%] w-auto"
                 />
               )}
             </div>
@@ -174,23 +177,26 @@ export function InEventScreen({
 
       {/* Center — dynamic text + best bid + budget */}
       <div className="flex flex-col items-center gap-4 pt-2">
-        <p className="text-center text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,1)]">
+        <p className="text-center text-3xl font-bold text-white [text-shadow:0px_0px_10px_rgba(255,255,255,0.5)]">
           {dynamicText}
         </p>
 
-        <p className="text-center text-xl font-bold text-white [text-shadow:0px_0px_5px_rgba(255,255,255,1)]">
+        <p className="text-center text-xl font-bold text-white [text-shadow:0px_0px_5px_rgba(255,255,255,0.5)]">
           Puja mas grande:
           <br />
           {topBid ? `${topBid.amount}$ · ${topBidder?.display_name ?? '—'}` : '—'}
         </p>
 
         <div className="flex h-11 items-center gap-1.5 rounded-[10px] bg-[#09090b] px-3 outline outline-2 -outline-offset-2 outline-[#374151]">
-          <span className="text-xl font-medium text-white [text-shadow:0px_0px_5px_rgba(255,255,255,1)]">
+          <span className="text-xl font-medium text-white [text-shadow:0px_0px_5px_rgba(255,255,255,0.5)]">
             {budget}
           </span>
           <span className="text-xl font-bold text-white">₽</span>
         </div>
       </div>
+
+      {/* Spacer — pushes the action controls to the bottom, filling the height. */}
+      <div className="flex-1" />
 
       {/* Buscar — nominate (enabled only on your turn) */}
       <button
@@ -199,22 +205,22 @@ export function InEventScreen({
         onClick={() => setSearchOpen(true)}
         className={
           canSearch
-            ? 'h-16 w-80 rounded-xl bg-[#111827] text-2xl font-semibold text-indigo-300 shadow-[0px_0px_46px_0px_rgba(38,76,144,0.25)] outline outline-2 -outline-offset-2 outline-[#1e3a8a]'
-            : 'h-16 w-80 rounded-xl bg-[#171717] text-2xl font-medium text-neutral-400/25 outline outline-2 -outline-offset-2 outline-[#525252]'
+            ? 'h-16 w-full max-w-[20rem] rounded-xl bg-[#111827] text-2xl font-semibold text-indigo-300 shadow-[0px_0px_46px_0px_rgba(38,76,144,0.25)] outline outline-2 -outline-offset-2 outline-[#1e3a8a]'
+            : 'h-16 w-full max-w-[20rem] rounded-xl bg-[#171717] text-2xl font-medium text-neutral-400/25 outline outline-2 -outline-offset-2 outline-[#525252]'
         }
       >
         Buscar
       </button>
 
-      {/* Bid controls — the textbox is the exact bid; +N bumps it; › submits.
-          Enabled only while bidding (2s cooldown between submits). */}
-      <div className="flex w-full max-w-[25rem] flex-col items-center gap-4 px-2">
+      {/* Bid controls — full width; the textbox is the exact bid; +N bumps it;
+          › submits. Enabled only while bidding (2s cooldown between submits). */}
+      <div className="flex w-full flex-col items-center gap-4">
         <div className="flex w-full items-center gap-3">
           <div className="flex h-14 flex-1 items-center rounded-xl bg-[#09090b] px-4 outline outline-2 -outline-offset-2 outline-[#374151]">
             <input
               type="number"
               min={minBid}
-              disabled={!isBidding}
+              disabled={!isBidding || isPaused}
               value={bidValue}
               onChange={(e) => setBidValue(Math.max(0, parseInt(e.target.value, 10) || 0))}
               className="w-full bg-transparent text-lg font-bold text-slate-100/60 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -236,9 +242,9 @@ export function InEventScreen({
             <button
               key={inc}
               type="button"
-              disabled={!isBidding}
+              disabled={!isBidding || isPaused}
               onClick={() => addToBid(inc)}
-              className="h-20 flex-1 rounded-xl bg-[#171717] text-2xl font-semibold text-lime-200 shadow-[0px_0px_46px_0px_rgba(48,110,25,0.25)] outline outline-2 -outline-offset-2 outline-[#3f6212] [text-shadow:0px_0px_10px_rgba(188,227,146,0.25)] disabled:opacity-40"
+              className="h-20 flex-1 rounded-xl bg-[#171717] text-2xl font-semibold text-lime-200 shadow-[0px_0px_46px_0px_rgba(48,110,25,0.25)] outline outline-2 -outline-offset-2 outline-[#3f6212] [text-shadow:0px_0px_10px_rgba(188,227,146,0.15)] disabled:opacity-40"
             >
               +{inc}
             </button>

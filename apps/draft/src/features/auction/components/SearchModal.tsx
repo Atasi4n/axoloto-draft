@@ -90,7 +90,7 @@ export function SearchModal({ open, onClose, onSelect, wide = false }: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={p.sprite_front} alt={p.name} className="h-16 w-16" />
                 )}
-                <span className="text-sm font-medium text-white [text-shadow:0px_0px_11px_rgba(255,255,255,0.25)]">
+                <span className="text-sm font-medium text-white [text-shadow:0px_0px_11px_rgba(255,255,255,0.15)]">
                   {p.name}
                 </span>
               </span>

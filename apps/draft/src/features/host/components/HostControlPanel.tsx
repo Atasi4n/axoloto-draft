@@ -45,7 +45,14 @@ const MEDAL = [
   { dot: '#d98b4a', ring: 'rgba(217,139,74,0.45)', bg: '#1a130c', text: '#e0a96a' },
 ]
 
-export function HostControlPanel({ eventId }: { eventId: string }) {
+export function HostControlPanel({
+  eventId,
+  online,
+}: {
+  eventId: string
+  // Realtime presence: set of currently-connected user ids.
+  online: Set<string>
+}) {
   const participants = useAuctionStore((s) => s.participants)
   const state = useAuctionStore((s) => s.state)
   const turns = useAuctionStore((s) => s.turns)
@@ -74,6 +81,28 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
       else next.add(pid)
       return next
     })
+
+  // A disconnected invalido is auto-skipped automatically. presenceSeen guards
+  // against the brief empty presence state on a host reload (which would
+  // otherwise flag everyone offline for a moment).
+  const presenceSeen = useRef(false)
+  if (online.size > 0) presenceSeen.current = true
+
+  const offlineSkipIds = useMemo(() => {
+    const s = new Set<string>()
+    if (!presenceSeen.current) return s
+    participants.forEach((p) => {
+      if (!online.has(p.user_id)) s.add(p.id)
+    })
+    return s
+  }, [participants, online])
+
+  // What the skip logic actually uses: the host's manual toggles plus anyone
+  // currently offline.
+  const effectiveSkipIds = useMemo(
+    () => new Set<string>([...autoSkipIds, ...offlineSkipIds]),
+    [autoSkipIds, offlineSkipIds],
+  )
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -148,7 +177,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
       state?.status === 'IDLE' &&
       state?.current_turn_id &&
       !state?.timer_ends_at &&
-      !(currentTurn && autoSkipIds.has(currentTurn.participant_id)) &&
+      !(currentTurn && effectiveSkipIds.has(currentTurn.participant_id)) &&
       !settingTimerRef.current
     ) {
       settingTimerRef.current = true
@@ -160,7 +189,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         settingTimerRef.current = false
       })
     }
-  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, currentTurn, autoSkipIds, eventId, setSnapshot])
+  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, currentTurn, effectiveSkipIds, eventId, setSnapshot])
 
   // Auto Skip: as soon as it's a flagged participant's nomination turn, skip it
   // immediately (no waiting for their timer). Cascades through consecutive ones.
@@ -170,7 +199,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
       !isPaused &&
       state?.status === 'IDLE' &&
       currentTurn &&
-      autoSkipIds.has(currentTurn.participant_id) &&
+      effectiveSkipIds.has(currentTurn.participant_id) &&
       !autoSkippingRef.current
     ) {
       autoSkippingRef.current = true
@@ -182,7 +211,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         autoSkippingRef.current = false
       })
     }
-  }, [isNominationPhase, isPaused, state?.status, currentTurn, autoSkipIds, eventId, setSnapshot])
+  }, [isNominationPhase, isPaused, state?.status, currentTurn, effectiveSkipIds, eventId, setSnapshot])
 
   // Timer hit 0: during BIDDING → resolve (assign to highest bidder); during
   // a nomination turn → skip to the next turn. resolve/skip are idempotent-ish
@@ -467,7 +496,7 @@ export function HostControlPanel({ eventId }: { eventId: string }) {
         <EditTeamModal
           eventId={eventId}
           participantId={editParticipantId}
-          autoSkip={autoSkipIds.has(editParticipantId)}
+          autoSkip={effectiveSkipIds.has(editParticipantId)}
           onToggleAutoSkip={() => toggleAutoSkip(editParticipantId)}
           onClose={() => setEditParticipantId(null)}
         />

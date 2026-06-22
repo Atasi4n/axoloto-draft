@@ -29,7 +29,7 @@ export function HostApp({ eventId, userId }: { eventId: string; userId: string }
   }
 
   return showControl ? (
-    <HostControlPanel eventId={eventId} />
+    <HostControlPanel eventId={eventId} online={online} />
   ) : (
     <HostWaitingRoom eventId={eventId} online={online} />
   )

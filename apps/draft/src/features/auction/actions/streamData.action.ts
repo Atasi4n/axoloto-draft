@@ -35,12 +35,18 @@ function buildStats(s: StatRow | null | undefined): StreamStat[] {
   ]
 }
 export type StreamData = {
+  // The event id is exposed so the client can join the presence channel.
+  eventId: string
   phase: AuctionPhase | null
   status: AuctionStatus | null
   timerEndsAt: string | null
   pausedAt: string | null
+  // Participant whose turn it currently is (highlighted green on the stream).
+  currentTurnParticipantId: string | null
   participants: {
     id: string
+    // user_id is needed to match against realtime presence (online/offline).
+    userId: string
     name: string
     team: { speciesId: number; sprite: string | null; mega: boolean }[]
   }[]
@@ -70,7 +76,7 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
 
   const [stateR, partsR, teamR] = await Promise.all([
     adminClient.from('auction_state').select('*').eq('event_id', eventId).single(),
-    adminClient.from('participants').select('id, display_name').eq('event_id', eventId),
+    adminClient.from('participants').select('id, user_id, display_name').eq('event_id', eventId),
     adminClient
       .from('team_pokemon')
       .select('participant_id, species_id, sprite_snapshot, is_mega_capable')
@@ -80,9 +86,21 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
   const state = stateR.data
   const team = teamR.data ?? []
 
+  // Resolve the current turn to the participant it belongs to.
+  let currentTurnParticipantId: string | null = null
+  if (state?.current_turn_id) {
+    const { data: turn } = await adminClient
+      .from('auction_turns')
+      .select('participant_id')
+      .eq('id', state.current_turn_id)
+      .single()
+    currentTurnParticipantId = turn?.participant_id ?? null
+  }
+
   const participants = (partsR.data ?? [])
     .map((p) => ({
       id: p.id,
+      userId: p.user_id,
       name: p.display_name,
       team: team
         .filter((t) => t.participant_id === p.id)
@@ -168,10 +186,12 @@ export async function getStreamDataAction(): Promise<StreamData | null> {
   }
 
   return {
+    eventId,
     phase: (state?.phase as AuctionPhase | null) ?? null,
     status: (state?.status as AuctionStatus | null) ?? null,
     timerEndsAt: state?.timer_ends_at ?? null,
     pausedAt: state?.paused_at ?? null,
+    currentTurnParticipantId,
     participants,
     pokemon,
     topBids,

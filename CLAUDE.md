@@ -63,7 +63,7 @@ types/          auction.types.ts (DB rows + enums), database.types.ts (shim → 
 
 ```
 INITIAL_BUDGET 1000   MIN_BID 50   MAX_BID 750   MIN_INCREMENT 25   TEAM_SIZE 6
-TIMER_SECONDS 30   BID_EXTENSION_SECS 5 (never exceeds TIMER)   BID_COOLDOWN_SECS 2
+TIMER_SECONDS 30   BID_EXTENSION_SECS 5 (added in full per bid, no cap)   BID_COOLDOWN_SECS 2
 COACH_OVERRIDES 2 (per coach, whole event)   BAN_VIOLATION_PENALTY 100
 BANNED_SPECIES_IDS [9, 94, 121, 448, 964]  (by species_id → covers all forms)
 ```
@@ -79,7 +79,7 @@ BANNED_SPECIES_IDS [9, 94, 121, 448, 964]  (by species_id → covers all forms)
 
 **Turns:** order randomized once at start (`auction_turns`, never mutated). Nominator picks; zero bids → auto-assigned to nominator at MIN_BID. Coach may override (2/event); participant may delegate to host.
 
-**Bidding:** starts at MIN_BID; each bid ≥ current + MIN_INCREMENT, ≤ MAX_BID; timer extends BID_EXTENSION_SECS (capped at TIMER); 2s server-side cooldown; host can undo last bid.
+**Bidding:** starts at MIN_BID; each bid ≥ current + MIN_INCREMENT, ≤ MAX_BID; timer extends BID_EXTENSION_SECS in full per bid (no cap — a live bidding war keeps extending); 2s server-side cooldown; host can undo last bid.
 
 ## Engine files (`features/auction/engine/`, server-only)
 

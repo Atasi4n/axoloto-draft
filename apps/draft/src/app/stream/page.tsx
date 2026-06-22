@@ -1,13 +1,15 @@
 'use client'
 
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Kaushan_Script } from 'next/font/google'
 import {
   getStreamDataAction,
   type StreamData,
   type StreamStat,
 } from '@/features/auction/actions/streamData.action'
+import { useOnlineUserIds } from '@/features/auction/realtime/useOnlineUserIds'
 import { StreamTimer } from '@/features/auction/components/StreamTimer'
 import { AUCTION_CONFIG } from '@/lib/config/auction.config'
 import type { AuctionPhase } from '@/types/auction.types'
@@ -306,6 +308,13 @@ export default function StreamPage() {
   const [flipping, setFlipping] = useState(false) // mid-flip (sprite edge-on)
   const stage = useStageScale()
 
+  // Who is connected right now (realtime presence) — drives the red "offline"
+  // name colour. Gated by presenceSeen so a brief empty state on load (before
+  // the first sync) doesn't flash every participant red.
+  const onlineIds = useOnlineUserIds(data?.eventId ?? null)
+  const presenceSeen = useRef(false)
+  if (onlineIds.size > 0) presenceSeen.current = true
+
   useEffect(() => {
     let active = true
 
@@ -501,18 +510,34 @@ const remaining = data?.timerEndsAt
             rowGap: 34,
           }}
         >
-          {participants.map((participant) => (
-            <div key={participant.id} className="flex w-72 flex-col gap-3.5">
-              <span
-                className="h-10 truncate text-[36px] font-medium leading-10 text-white"
-                style={GLOW}
-              >
-                {participant.name}
-              </span>
+          {participants.map((participant) => {
+            const isTurn = participant.id === data?.currentTurnParticipantId
+            // Offline (not connected) takes priority over the green turn colour.
+            const isOffline =
+              presenceSeen.current && !onlineIds.has(participant.userId)
 
-              <TeamSlots team={participant.team} />
-            </div>
-          ))}
+            let nameStyle: CSSProperties
+            if (isOffline) {
+              nameStyle = { color: '#f87171', textShadow: '0 0 12px rgba(248,113,113,0.6)' }
+            } else if (isTurn) {
+              nameStyle = { color: 'hsl(120 85% 55%)', textShadow: '0 0 12px hsl(120 85% 55%)' }
+            } else {
+              nameStyle = { ...GLOW, color: '#ffffff' }
+            }
+
+            return (
+              <div key={participant.id} className="flex w-72 flex-col gap-3.5">
+                <span
+                  className="h-10 truncate text-[36px] font-medium leading-10"
+                  style={nameStyle}
+                >
+                  {participant.name}
+                </span>
+
+                <TeamSlots team={participant.team} />
+              </div>
+            )
+          })}
         </section>
 
         {/* CURRENT POKEMON CARD */}

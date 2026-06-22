@@ -82,27 +82,40 @@ export function HostControlPanel({
       return next
     })
 
-  // A disconnected invalido is auto-skipped automatically. presenceSeen guards
-  // against the brief empty presence state on a host reload (which would
-  // otherwise flag everyone offline for a moment).
-  const presenceSeen = useRef(false)
-  if (online.size > 0) presenceSeen.current = true
+  // Auto Skip turns ON automatically when an invalido disconnects, but as a
+  // REMOVABLE default — not a lock. This effect is edge-triggered on presence
+  // changes: a participant going offline gets added once (the host can still
+  // toggle it back off), and reconnecting clears the auto flag. Because it only
+  // reacts to actual offline/online transitions, a manual removal isn't undone.
+  const prevOfflineRef = useRef<Set<string>>(new Set())
+  const presenceSeenRef = useRef(false)
+  useEffect(() => {
+    // Ignore the brief empty presence state before the first sync.
+    if (online.size === 0 && !presenceSeenRef.current) return
+    presenceSeenRef.current = true
 
-  const offlineSkipIds = useMemo(() => {
-    const s = new Set<string>()
-    if (!presenceSeen.current) return s
+    const offline = new Set<string>()
     participants.forEach((p) => {
-      if (!online.has(p.user_id)) s.add(p.id)
+      if (!online.has(p.user_id)) offline.add(p.id)
     })
-    return s
-  }, [participants, online])
 
-  // What the skip logic actually uses: the host's manual toggles plus anyone
-  // currently offline.
-  const effectiveSkipIds = useMemo(
-    () => new Set<string>([...autoSkipIds, ...offlineSkipIds]),
-    [autoSkipIds, offlineSkipIds],
-  )
+    const prev = prevOfflineRef.current
+    const unchanged =
+      offline.size === prev.size && [...offline].every((id) => prev.has(id))
+    if (unchanged) return
+
+    setAutoSkipIds((cur) => {
+      const next = new Set(cur)
+      offline.forEach((id) => {
+        if (!prev.has(id)) next.add(id) // newly offline → default to skipped
+      })
+      prev.forEach((id) => {
+        if (!offline.has(id)) next.delete(id) // reconnected → clear the auto flag
+      })
+      return next
+    })
+    prevOfflineRef.current = offline
+  }, [online, participants])
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -177,7 +190,7 @@ export function HostControlPanel({
       state?.status === 'IDLE' &&
       state?.current_turn_id &&
       !state?.timer_ends_at &&
-      !(currentTurn && effectiveSkipIds.has(currentTurn.participant_id)) &&
+      !(currentTurn && autoSkipIds.has(currentTurn.participant_id)) &&
       !settingTimerRef.current
     ) {
       settingTimerRef.current = true
@@ -189,7 +202,7 @@ export function HostControlPanel({
         settingTimerRef.current = false
       })
     }
-  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, currentTurn, effectiveSkipIds, eventId, setSnapshot])
+  }, [isNominationPhase, state?.status, state?.current_turn_id, state?.timer_ends_at, currentTurn, autoSkipIds, eventId, setSnapshot])
 
   // Auto Skip: as soon as it's a flagged participant's nomination turn, skip it
   // immediately (no waiting for their timer). Cascades through consecutive ones.
@@ -199,7 +212,7 @@ export function HostControlPanel({
       !isPaused &&
       state?.status === 'IDLE' &&
       currentTurn &&
-      effectiveSkipIds.has(currentTurn.participant_id) &&
+      autoSkipIds.has(currentTurn.participant_id) &&
       !autoSkippingRef.current
     ) {
       autoSkippingRef.current = true
@@ -211,7 +224,7 @@ export function HostControlPanel({
         autoSkippingRef.current = false
       })
     }
-  }, [isNominationPhase, isPaused, state?.status, currentTurn, effectiveSkipIds, eventId, setSnapshot])
+  }, [isNominationPhase, isPaused, state?.status, currentTurn, autoSkipIds, eventId, setSnapshot])
 
   // Timer hit 0: during BIDDING → resolve (assign to highest bidder); during
   // a nomination turn → skip to the next turn. resolve/skip are idempotent-ish
@@ -496,7 +509,7 @@ export function HostControlPanel({
         <EditTeamModal
           eventId={eventId}
           participantId={editParticipantId}
-          autoSkip={effectiveSkipIds.has(editParticipantId)}
+          autoSkip={autoSkipIds.has(editParticipantId)}
           onToggleAutoSkip={() => toggleAutoSkip(editParticipantId)}
           onClose={() => setEditParticipantId(null)}
         />

@@ -45,14 +45,7 @@ const MEDAL = [
   { dot: '#d98b4a', ring: 'rgba(217,139,74,0.45)', bg: '#1a130c', text: '#e0a96a' },
 ]
 
-export function HostControlPanel({
-  eventId,
-  online,
-}: {
-  eventId: string
-  // Realtime presence: set of currently-connected user ids.
-  online: Set<string>
-}) {
+export function HostControlPanel({ eventId }: { eventId: string }) {
   const participants = useAuctionStore((s) => s.participants)
   const state = useAuctionStore((s) => s.state)
   const turns = useAuctionStore((s) => s.turns)
@@ -81,41 +74,6 @@ export function HostControlPanel({
       else next.add(pid)
       return next
     })
-
-  // Auto Skip turns ON automatically when an invalido disconnects, but as a
-  // REMOVABLE default — not a lock. This effect is edge-triggered on presence
-  // changes: a participant going offline gets added once (the host can still
-  // toggle it back off), and reconnecting clears the auto flag. Because it only
-  // reacts to actual offline/online transitions, a manual removal isn't undone.
-  const prevOfflineRef = useRef<Set<string>>(new Set())
-  const presenceSeenRef = useRef(false)
-  useEffect(() => {
-    // Ignore the brief empty presence state before the first sync.
-    if (online.size === 0 && !presenceSeenRef.current) return
-    presenceSeenRef.current = true
-
-    const offline = new Set<string>()
-    participants.forEach((p) => {
-      if (!online.has(p.user_id)) offline.add(p.id)
-    })
-
-    const prev = prevOfflineRef.current
-    const unchanged =
-      offline.size === prev.size && [...offline].every((id) => prev.has(id))
-    if (unchanged) return
-
-    setAutoSkipIds((cur) => {
-      const next = new Set(cur)
-      offline.forEach((id) => {
-        if (!prev.has(id)) next.add(id) // newly offline → default to skipped
-      })
-      prev.forEach((id) => {
-        if (!offline.has(id)) next.delete(id) // reconnected → clear the auto flag
-      })
-      return next
-    })
-    prevOfflineRef.current = offline
-  }, [online, participants])
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
